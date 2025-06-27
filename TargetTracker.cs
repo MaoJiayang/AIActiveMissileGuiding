@@ -182,7 +182,7 @@ namespace IngameScript
                 // 1-2个数据点，使用匀速运动预测
                 return PredictUniformMotion(futureTimeMs);
             }
-
+            
             // 获取历史数据点
             int historyLength = _history.Count;
             int index2 = historyLength / 2;

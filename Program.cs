@@ -181,7 +181,6 @@ namespace IngameScript
                         当前状态 = 导弹状态.跟踪目标;
                         上次目标位置 = 当前目标位置;
                         上次目标更新时间 = 更新计数器;
-                        Echo("目标锁定 - 切换到跟踪模式");
                     }
                     break;
 
@@ -193,7 +192,6 @@ namespace IngameScript
                         {
                             当前状态 = 导弹状态.预测制导;
                             预测开始帧数 = 更新计数器;
-                            Echo("目标丢失 - 切换到预测模式");
                         }
                     }
                     else
@@ -210,12 +208,10 @@ namespace IngameScript
                         当前状态 = 导弹状态.跟踪目标;
                         上次目标位置 = 当前目标位置;
                         上次目标更新时间 = 更新计数器;
-                        Echo("目标重新锁定 - 切换到跟踪模式");
                     }
                     else if (更新计数器 - 预测开始帧数 > 预测制导持续帧数)
                     {
                         当前状态 = 导弹状态.搜索目标;
-                        Echo("预测时间结束 - 切换到搜索模式");
                     }
                     break;
             }
@@ -250,7 +246,6 @@ namespace IngameScript
         private void 处理跟踪状态(Vector3D 目标位置)
         {
             Echo("状态: 跟踪目标");
-            Echo($"目标位置: {目标位置}");
             
             // 更新目标跟踪器
             if (控制器 != null)
@@ -285,8 +280,6 @@ namespace IngameScript
                 SimpleTargetInfo 目标信息 = new SimpleTargetInfo(预测目标.Position, 预测目标.Velocity, 预测目标.TimeStamp);
                 Vector3D 制导命令 = 比例导航制导(控制器, 目标信息);
                 应用制导命令(制导命令, 控制器);
-
-                Echo($"预测位置: {预测目标.Position}");
             }
         }
 
@@ -494,10 +487,10 @@ namespace IngameScript
             Vector3D 视线单位向量 = 导弹到目标 / 距离;
 
             // ----- 步骤2: 估计目标加速度 (用于接近速度补偿部分) -----
-            SimpleTargetInfo? 较新信息 = 目标跟踪器.GetTargetInfoAt(0);
-            SimpleTargetInfo? 较旧信息 = 目标跟踪器.GetTargetInfoAt(1);
-            SimpleTargetInfo? 最旧信息 = 目标跟踪器.GetTargetInfoAt(2);
-            Vector3D 目标加速度 = 计算加速度(较新信息.Value, 较旧信息.Value, 最旧信息.Value);
+            // SimpleTargetInfo? 较新信息 = 目标跟踪器.GetTargetInfoAt(0);
+            // SimpleTargetInfo? 较旧信息 = 目标跟踪器.GetTargetInfoAt(1);
+            // SimpleTargetInfo? 最旧信息 = 目标跟踪器.GetTargetInfoAt(2);
+            // Vector3D 目标加速度 = 计算加速度(较新信息.Value, 较旧信息.Value, 最旧信息.Value);
 
             // ----- 步骤3: 计算相对速度和闭合速度 -----
             Vector3D 相对速度 = 目标速度 - 导弹速度;
@@ -513,7 +506,7 @@ namespace IngameScript
             double 相对速度大小 = 相对速度.Length();
             Vector3D 比例导航加速度 = 导航常数 * 相对速度大小 * Vector3D.Cross(角速度, 视线单位向量);
 
-            // // 可选: 添加目标加速度补偿(增强比例导航)
+            // // // 可选: 添加目标加速度补偿(增强比例导航)
             // Vector3D 横向目标加速度 = 目标加速度 - Vector3D.Dot(目标加速度, 视线单位向量) * 视线单位向量;
             // 比例导航加速度 += 0.5 * 导航常数 * 横向目标加速度;
 
@@ -538,8 +531,8 @@ namespace IngameScript
             Echo($"[比例导航] 距离: {距离:n1} m");
             Echo($"[比例导航] 视线角速率: {角速度.Length():n6} rad/s");
             Echo($"[比例导航] 接近速度: {接近速度:n1} m/s");
-            Echo($"[重力补偿] 重力: {重力加速度.Length():n1} m/s²");
-            
+            // Echo($"[比例导航] 横向加速度：{横向目标加速度.Length():n1} m/s^2");
+
             return 最终加速度命令;
         }
 
@@ -568,7 +561,7 @@ namespace IngameScript
             {
                 预测时间 = 当前距离 / 接近速度;
                 // 限制预测时间，避免过度预测
-                预测时间 = Math.Min(预测时间, 20.0); // 最多预测20秒
+                预测时间 = Math.Min(预测时间, 200.0); // 最多预测20秒
             }
             else
             {
@@ -588,12 +581,40 @@ namespace IngameScript
             Vector3D 接近加速度 = 加速度大小 * 预测位置方向;
             
             // 输出诊断信息
-            Echo($"[接近加速度] 大小: {加速度大小:n1} m/s²");
+            Echo($"[横向频率] {横向频率:n3}");
             // Echo($"[预测时间] {预测时间:n2} s");
             // Echo($"[接近速度] {接近速度:n1} m/s");
 
             return 接近加速度;
         }
+
+        // /// <summary>
+        // /// 基于横向目标加速度的接近加速度计算
+        // /// </summary>
+        // /// <param name="横向加速度">已计算的横向目标加速度</param>
+        // /// <param name="视线">导弹到目标的视线向量</param>
+        // /// <returns>接近加速度向量</returns>
+        // private Vector3D 计算无界接近加速度(Vector3D 横向加速度, Vector3D 视线)
+        // {
+        //     Vector3D 视线单位向量 = Vector3D.Normalize(视线);
+        //     double 距离 = 视线.Length();
+            
+        //     // 核心改进：使用横向目标加速度计算横向频率
+        //     // 物理含义：√(A⊥/R) 类似于角加速度的平方根，反映机动强度
+        //     double 横向频率 = 横向加速度.Length() / Math.Max(距离, 最小向量长度);
+            
+        //     // 计算接近加速度大小
+        //     double 加速度大小 = 激进比例 / (横向频率 + 最小向量长度);
+        //     加速度大小 = Math.Max(加速度大小, 最小接近加速度);
+            
+        //     // 接近加速度指向目标
+        //     Vector3D 接近加速度 = 加速度大小 * 视线单位向量;
+            
+        //     // 输出诊断信息
+        //     Echo($"[横向频率] {横向频率:n3}");
+    
+        //     return 接近加速度;
+        // }
 
         /// <summary>
         /// 只使用位置信息计算三点加速度

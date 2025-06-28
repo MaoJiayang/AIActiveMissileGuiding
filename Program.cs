@@ -73,6 +73,7 @@ namespace IngameScript
 
         #region 硬件组件
         private bool 已经初始化 = false;
+        private IMyBlockGroup 方块组 = null;
         private string 组名 = "导弹";
 
         // AI组件
@@ -145,9 +146,7 @@ namespace IngameScript
         }
 
         public void Main(string argument, UpdateType updateSource)
-        {
-            更新计数器 = (更新计数器 + 1) % int.MaxValue;
-            
+        { 
             // 初始化硬件（如果需要）
             if (!已经初始化)
             {
@@ -155,11 +154,11 @@ namespace IngameScript
                 已经初始化 = 初始化硬件();
                 return;
             }
+            更新计数器 = (更新计数器 + 1) % int.MaxValue;
             if (更新计数器 % 方块更新间隔 == 0)
             {
-                初始化硬件();
+                已经初始化 = 初始化硬件();
             }
-            
             // 获取目标位置
             Vector3D 当前目标位置 = 从飞行块获取目标();
             
@@ -312,7 +311,7 @@ namespace IngameScript
         private void 处理搜索状态()
         {
             Echo("状态: 搜索目标中...");
-            if(目标跟踪器.GetHistoryCount() > 0)
+            if(目标跟踪器.GetHistoryCount() > 0 || 更新计数器 < 60)
             {
                 战斗块.UpdateTargetInterval = 0; // 恢复战斗块更新目标间隔          
                 // 停止所有推进器
@@ -379,32 +378,32 @@ namespace IngameScript
         private bool 初始化硬件()
         {
             // 寻找包含当前可编程块(Me)的、以组名开头的方块组
-            IMyBlockGroup 方块组 = null;
-            List<IMyBlockGroup> 所有组 = new List<IMyBlockGroup>();
-            GridTerminalSystem.GetBlockGroups(所有组);
-
-            foreach (var 组 in 所有组)
+            if (!已经初始化)
             {
-                // 检查组名是否以指定组名开头
-                if (组.Name.StartsWith(组名))
+                List<IMyBlockGroup> 所有组 = new List<IMyBlockGroup>();
+                GridTerminalSystem.GetBlockGroups(所有组);
+                foreach (var 组 in 所有组)
                 {
-                    // 检查该组是否包含当前可编程块
-                    List<IMyTerminalBlock> 组内方块 = new List<IMyTerminalBlock>();
-                    组.GetBlocks(组内方块);
-                    
-                    if (组内方块.Contains(Me))
+                    // 检查组名是否以指定组名开头
+                    if (组.Name.StartsWith(组名))
                     {
-                        方块组 = 组;
-                        break;
+                        // 检查该组是否包含当前可编程块
+                        List<IMyTerminalBlock> 组内方块 = new List<IMyTerminalBlock>();
+                        组.GetBlocks(组内方块);
+
+                        if (组内方块.Contains(Me))
+                        {
+                            方块组 = 组;
+                            break;
+                        }
                     }
                 }
+                if (方块组 == null)
+                {
+                    Echo($"未找到包含当前可编程块的、以'{组名}'开头的方块组");
+                    return false;
+                }
             }
-            if (方块组 == null)
-            {
-                Echo($"未找到包含当前可编程块的、以'{组名}'开头的方块组"); 
-                return false;
-            }
-
             // 获取控制器
             List<IMyShipController> 控制器列表 = new List<IMyShipController>();
             方块组.GetBlocksOfType(控制器列表);
@@ -422,10 +421,7 @@ namespace IngameScript
             // 初始化引爆系统（可选）
             初始化引爆系统(方块组);
 
-            // 配置AI组件
-            配置AI组件();
-
-            bool 初始化完整 = 控制器 != null && 推进器列表.Count > 0 && 陀螺仪列表.Count > 0;
+            bool 初始化完整 = 配置AI组件(方块组) && 控制器 != null && 推进器列表.Count > 0 && 陀螺仪列表.Count > 0;
 
             if (初始化完整)
             {
@@ -438,7 +434,7 @@ namespace IngameScript
             }
             else
             {
-                Echo("硬件初始化不完整");
+                Echo($"硬件初始化不完整: 控制器={控制器?.CustomName}, 推进器={推进器列表.Count}, 陀螺仪={陀螺仪列表.Count}");
             }
             return 初始化完整;
         }
@@ -503,13 +499,12 @@ namespace IngameScript
         /// <summary>
         /// 配置AI组件
         /// </summary>
-        private void 配置AI组件()
+        private bool 配置AI组件(IMyBlockGroup 方块组)
         {
-            var 方块组 = GridTerminalSystem.GetBlockGroupWithName(组名);
             if (方块组 == null)
             {
                 Echo($"未找到组名为{组名}的方块组。");
-                return;
+                return false;
             }
 
             // 获取单个飞行块和战斗块
@@ -523,7 +518,7 @@ namespace IngameScript
             if (飞行块列表.Count == 0)
             {
                 Echo($"缺少飞行方块。");
-                return;
+                return false;
             }
 
             // 只使用第一个找到的块
@@ -563,6 +558,7 @@ namespace IngameScript
                 }
                 Echo($"配置战斗块: {战斗块.CustomName}");
             }
+            return 飞行块 != null && 战斗块 != null;
         }
 
         #endregion

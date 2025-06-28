@@ -130,7 +130,6 @@ namespace IngameScript
         {
             _history.Clear();
         }
-        
         /// <summary>
         /// 获取历史记录中指定索引的目标信息。
         /// 索引<0时返回最新；索引>=Count时返回最旧；无历史时返回null

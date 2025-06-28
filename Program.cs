@@ -32,7 +32,9 @@ namespace IngameScript
             搜索目标,    // 搜索目标
             跟踪目标,    // 跟踪目标
             预测制导,     // 预测制导
-            测试状态
+            测试状态,
+            引爆激发,     // 引爆激发雷管组
+            引爆最终      // 引爆最终雷管组
         }
 
         #endregion
@@ -46,11 +48,15 @@ namespace IngameScript
         private const double 最小接近加速度 = 5;                // 最小接近加速度(m/s)
         private const double 时间常数 = 1f / 60f;                // 时间常数(秒)
         private const int 陀螺仪更新间隔 = 5;                     // 陀螺仪更新间隔(ticks)
-        private const double 角度误差阈值 = Math.PI / 180.0 * 0.15;  // 0.15度的角度误差阈值(弧度制)
+        private const double 角度误差阈值 = Math.PI / 180.0 * 0.25;  // 0.15度的角度误差阈值(弧度制)
+
+        // 引爆相关常量
+        private const double 引爆距离阈值 = 5.0;                   // 接近引爆距离阈值(米)
 
         // 状态切换时间常量
         private const int 目标丢失超时帧数 = 180;                 // 目标丢失判定时间
         private const int 预测制导持续帧数 = 300;                 // 预测制导持续时间
+        private const int 方块更新间隔 = 1200;                     // 重新初始化方块的间隔
 
         #endregion
 
@@ -59,24 +65,30 @@ namespace IngameScript
         private 导弹状态 当前状态 = 导弹状态.搜索目标;
         private Vector3D 上次目标位置 = Vector3D.Zero;
         private long 上次目标更新时间 = 0;
-        private double 上次角度误差 = 0;
         private int 预测开始帧数 = 0;
         private int 更新计数器 = 0;
+        private bool 等待二阶段引爆 = false;
 
         #endregion
 
         #region 硬件组件
-
+        private bool 已经初始化 = false;
         private string 组名 = "导弹";
-        
+
         // AI组件
         private IMyFlightMovementBlock 飞行块;
         private IMyOffensiveCombatBlock 战斗块;
-        
+
         // 控制组件
         private IMyShipController 控制器;
         private List<IMyThrust> 推进器列表 = new List<IMyThrust>();
         private List<IMyGyro> 陀螺仪列表 = new List<IMyGyro>();
+
+        // 引爆系统组件（可选）
+        private List<IMySensorBlock> 传感器列表 = new List<IMySensorBlock>();
+        private List<IMyWarhead> 激发雷管组 = new List<IMyWarhead>();
+        private List<IMyWarhead> 引爆雷管组 = new List<IMyWarhead>();
+        private bool 引爆系统可用 = false;
         
         // 推进器分组映射表
         private Dictionary<string, List<IMyThrust>> 推进器方向组 = new Dictionary<string, List<IMyThrust>>
@@ -90,20 +102,21 @@ namespace IngameScript
             {"XP", 0}, {"XN", 0}, {"YP", 0}, {"YN", 0}, {"ZP", 0}, {"ZN", 0}
         };
         private bool 推进器已分类 = false;
+        private bool 陀螺仪已清零 = false;
 
         #endregion
 
         #region PID控制系统
 
         // PID控制器 - 外环(角度误差->期望角速度)
-        private PID 偏航外环 = new PID(4, 0.01, 0.2, 时间常数 * 陀螺仪更新间隔);// );//
-        private PID 俯仰外环 = new PID(4, 0.01, 0.2, 时间常数 * 陀螺仪更新间隔);
-        private PID 横滚外环 = new PID(4, 0.01, 0.2, 时间常数 * 陀螺仪更新间隔);
+        private PID 偏航外环 = new PID(4, 0, 0, 时间常数 * 陀螺仪更新间隔);// );//
+        private PID 俯仰外环 = new PID(4, 0, 0, 时间常数 * 陀螺仪更新间隔);
+        private PID 横滚外环 = new PID(4, 0, 0, 时间常数 * 陀螺仪更新间隔);
 
         // PID控制器 - 内环(角速度误差->陀螺仪设定)
-        private PID 偏航内环PD = new PID(12, 0.0, 0.01, 时间常数 * 陀螺仪更新间隔);
-        private PID 俯仰内环PD = new PID(12, 0.0, 0.01, 时间常数 * 陀螺仪更新间隔);
-        private PID 横滚内环PD = new PID(12, 0.0, 0.01, 时间常数 * 陀螺仪更新间隔);
+        private PID 偏航内环PD = new PID(12, 0.005, 0.2, 时间常数 * 陀螺仪更新间隔);
+        private PID 俯仰内环PD = new PID(12, 0.005, 0.2, 时间常数 * 陀螺仪更新间隔);
+        private PID 横滚内环PD = new PID(12, 0.005, 0.2, 时间常数 * 陀螺仪更新间隔);
 
         #endregion
 
@@ -128,6 +141,7 @@ namespace IngameScript
         {
             // 设置更新频率为每tick执行
             Runtime.UpdateFrequency = UpdateFrequency.Update1;
+            已经初始化 = 初始化硬件();
         }
 
         public void Main(string argument, UpdateType updateSource)
@@ -135,11 +149,17 @@ namespace IngameScript
             更新计数器 = (更新计数器 + 1) % int.MaxValue;
             
             // 初始化硬件（如果需要）
-            if (!初始化硬件())
+            if (!已经初始化)
             {
                 Echo("硬件初始化失败");
+                已经初始化 = 初始化硬件();
                 return;
-            }       
+            }
+            if (更新计数器 % 方块更新间隔 == 0)
+            {
+                初始化硬件();
+            }
+            
             // 获取目标位置
             Vector3D 当前目标位置 = 从飞行块获取目标();
             
@@ -160,10 +180,20 @@ namespace IngameScript
                 case 导弹状态.预测制导:
                     处理预测状态();
                     break;
+                    
                 case 导弹状态.测试状态:
                     TestRotationControl(argument);
                     break;
+                    
+                case 导弹状态.引爆激发:
+                    处理引爆激发状态();
+                    break;
+                    
+                case 导弹状态.引爆最终:
+                    处理引爆最终状态();
+                    break;
             }
+            
             // 更新性能统计
             更新性能统计信息();
         }
@@ -175,7 +205,7 @@ namespace IngameScript
         /// <summary>
         /// 更新目标状态和状态机转换
         /// </summary>
-        private void 更新目标状态(Vector3D 当前目标位置,string argument = "")
+        private void 更新目标状态(Vector3D 当前目标位置, string argument = "")
         {
             bool 有有效目标 = !当前目标位置.Equals(Vector3D.NegativeInfinity);
             bool 目标位置已改变 = !当前目标位置.Equals(上次目标位置);
@@ -192,6 +222,25 @@ namespace IngameScript
                 {
                     // 退出测试状态，返回搜索状态
                     当前状态 = 导弹状态.搜索目标;
+                }
+                else if (argument.ToLower() == "detonate")
+                {
+                    // 直接引爆命令
+                    当前状态 = 导弹状态.引爆激发;
+                    return;
+                }
+            }
+
+            // 检查引爆条件（传感器和距离触发）
+            if (引爆系统可用 && (当前状态 == 导弹状态.跟踪目标 || 当前状态 == 导弹状态.预测制导))
+            {
+                bool 传感器触发 = 检查传感器触发();
+                bool 距离触发 = 检查距离触发();
+                Echo($"引爆触发: 传感器={传感器触发}, 距离={距离触发}");
+                if (传感器触发 || 距离触发)
+                {
+                    当前状态 = 导弹状态.引爆激发;
+                    return;
                 }
             }
 
@@ -244,11 +293,15 @@ namespace IngameScript
                     {
                         // 预测制导超时，返回搜索状态
                         当前状态 = 导弹状态.搜索目标;
-                        战斗块.UpdateTargetInterval = 0; // 恢复战斗块更新目标间隔
                     }
                     break;
 
                 case 导弹状态.测试状态:
+                    break;
+                    
+                case 导弹状态.引爆激发:
+                case 导弹状态.引爆最终:
+                    // 引爆状态由对应的处理方法管理状态转换
                     break;
             }
         }
@@ -259,21 +312,21 @@ namespace IngameScript
         private void 处理搜索状态()
         {
             Echo("状态: 搜索目标中...");
-            
-            // 清空目标历史
-            目标跟踪器.ClearHistory();
-            
-            // 停止所有推进器
-            foreach (var 推进器 in 推进器列表)
+            if(目标跟踪器.GetHistoryCount() > 0)
             {
-                推进器.ThrustOverride = 0f;
+                战斗块.UpdateTargetInterval = 0; // 恢复战斗块更新目标间隔          
+                // 停止所有推进器
+                foreach (var 推进器 in 推进器列表)
+                {
+                    推进器.ThrustOverride = 0f;
+                }
+                // 停止陀螺仪覆盖
+                foreach (var 陀螺仪 in 陀螺仪列表)
+                {
+                    陀螺仪.GyroOverride = false;
+                }
             }
-            
-            // 停止陀螺仪覆盖
-            foreach (var 陀螺仪 in 陀螺仪列表)
-            {
-                陀螺仪.GyroOverride = false;
-            }
+            目标跟踪器.ClearHistory();// 清空目标历史
         }
 
         /// <summary>
@@ -320,20 +373,35 @@ namespace IngameScript
         #endregion
 
         #region 硬件初始化
-
         /// <summary>
         /// 初始化硬件组件
         /// </summary>
         private bool 初始化硬件()
         {
-            // 如果已经初始化且硬件完整，直接返回
-            if (控制器 != null && 推进器列表.Count > 0 && 陀螺仪列表.Count > 0)
-                return true;
+            // 寻找包含当前可编程块(Me)的、以组名开头的方块组
+            IMyBlockGroup 方块组 = null;
+            List<IMyBlockGroup> 所有组 = new List<IMyBlockGroup>();
+            GridTerminalSystem.GetBlockGroups(所有组);
 
-            var 方块组 = GridTerminalSystem.GetBlockGroupWithName(组名);
+            foreach (var 组 in 所有组)
+            {
+                // 检查组名是否以指定组名开头
+                if (组.Name.StartsWith(组名))
+                {
+                    // 检查该组是否包含当前可编程块
+                    List<IMyTerminalBlock> 组内方块 = new List<IMyTerminalBlock>();
+                    组.GetBlocks(组内方块);
+                    
+                    if (组内方块.Contains(Me))
+                    {
+                        方块组 = 组;
+                        break;
+                    }
+                }
+            }
             if (方块组 == null)
             {
-                Echo($"未找到组名为{组名}的方块组");
+                Echo($"未找到包含当前可编程块的、以'{组名}'开头的方块组"); 
                 return false;
             }
 
@@ -351,6 +419,9 @@ namespace IngameScript
             陀螺仪列表.Clear();
             方块组.GetBlocksOfType(陀螺仪列表);
 
+            // 初始化引爆系统（可选）
+            初始化引爆系统(方块组);
+
             // 配置AI组件
             配置AI组件();
 
@@ -359,19 +430,74 @@ namespace IngameScript
             if (初始化完整)
             {
                 Echo($"硬件初始化完成: 控制器={控制器?.CustomName}, 推进器={推进器列表.Count}, 陀螺仪={陀螺仪列表.Count}");
-                // 重置推进器分类标志
-                if (!推进器已分类)
+                if (引爆系统可用)
                 {
-                    分类推进器(控制器);
+                    Echo($"引爆系统: 传感器={传感器列表.Count}, 激发雷管={激发雷管组.Count}, 引爆雷管={引爆雷管组.Count}");
                 }
-                推进器已分类 = true;
+                分类推进器(控制器);
             }
             else
             {
                 Echo("硬件初始化不完整");
             }
-
             return 初始化完整;
+        }
+
+        /// <summary>
+        /// 初始化引爆系统（可选功能，不满足条件不报错）
+        /// </summary>
+        private void 初始化引爆系统(IMyBlockGroup 方块组)
+        {
+            try
+            {
+                // 获取传感器
+                传感器列表.Clear();
+                方块组.GetBlocksOfType(传感器列表);
+
+                // 获取所有弹头
+                List<IMyWarhead> 所有弹头 = new List<IMyWarhead>();
+                方块组.GetBlocksOfType(所有弹头);
+
+                // 清空之前的分组
+                激发雷管组.Clear();
+                引爆雷管组.Clear();
+
+                if (所有弹头.Count >= 2)
+                {
+                    // 弹头数量足够，分为两组
+                    int 分割点 = 所有弹头.Count / 2;
+                    for (int i = 0; i < 所有弹头.Count; i++)
+                    {
+                        if (i < 分割点)
+                            激发雷管组.Add(所有弹头[i]);
+                        else
+                            引爆雷管组.Add(所有弹头[i]);
+                    }
+                }
+                else if (所有弹头.Count > 0)
+                {
+                    // 弹头数量不足，全部归入激发雷管组
+                    激发雷管组.AddRange(所有弹头);
+                    Echo("警告：弹头数量不足，全部分配到激发雷管组");
+                }
+
+                // 只要有弹头就启用引爆系统
+                引爆系统可用 = 所有弹头.Count > 0;
+                
+                if (引爆系统可用)
+                {
+                    Echo($"引爆系统已启用: 弹头={所有弹头.Count}个, 传感器={传感器列表.Count}个");
+                }
+                else
+                {
+                    Echo("引爆系统未启用：无弹头");
+                }
+            }
+            catch (Exception ex)
+            {
+                Echo($"引爆系统初始化警告: {ex.Message}");
+                引爆系统可用 = false;
+            }
         }
 
         /// <summary>
@@ -526,9 +652,8 @@ namespace IngameScript
 
             Vector3D 视线单位向量 = 导弹到目标 / 距离;
 
-            // ----- 步骤3: 计算相对速度和闭合速度 -----
+            // ----- 步骤3: 计算相对速度 -----
             Vector3D 相对速度 = 目标速度 - 导弹速度;
-            // double 接近速度 = -Vector3D.Dot(相对速度, 视线单位向量);
 
             // ----- 步骤4: 计算视线角速率 -----
             // 视线角速度 = (导弹到目标 × 相对速度) / |导弹到目标|²
@@ -756,8 +881,9 @@ namespace IngameScript
                     陀螺仪.Roll = 0f;
                     陀螺仪.GyroOverride = true; // 保持覆盖状态但输出为零
                 }
-                return;    
+                return;
             }
+
             // 仅在指定更新间隔执行，减少过度控制
             if (更新计数器 % 陀螺仪更新间隔 != 0)
                 return;
@@ -813,6 +939,7 @@ namespace IngameScript
             if (!推进器已分类)
             {
                 分类推进器(控制器);
+                推进器已分类 = true;
             }
 
             // // 将所有推进器的推力覆盖设置为0（清除旧指令）
@@ -1054,7 +1181,86 @@ namespace IngameScript
                 Echo("没有可用的目标历史记录进行测试");
             }
         }
+
+        #endregion
         
+        #region 引爆系统
+
+        /// <summary>
+        /// 检查传感器是否触发
+        /// </summary>
+        private bool 检查传感器触发()
+        {
+            // 引爆系统可用且有传感器才检查传感器触发
+            if (!引爆系统可用 || 传感器列表.Count == 0) return false;
+
+            foreach (var 传感器 in 传感器列表)
+            {
+                if (传感器.IsActive)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 检查距离是否触发引爆
+        /// </summary>
+        private bool 检查距离触发()
+        {
+            if (!引爆系统可用 || 控制器 == null) return false;
+            
+            // 检查上次目标位置是否有效
+            if (上次目标位置.Equals(Vector3D.Zero)) return false;
+            
+            Vector3D 当前位置 = 控制器.GetPosition();
+            double 距离 = Vector3D.Distance(当前位置, 上次目标位置);
+            
+            return 距离 <= 引爆距离阈值;
+        }
+
+        /// <summary>
+        /// 处理引爆激发状态
+        /// </summary>
+        private void 处理引爆激发状态()
+        {
+            Echo("状态: 引爆激发中...");
+            
+            // 触发激发雷管组
+            foreach (var 弹头 in 激发雷管组)
+            {
+                弹头.IsArmed = true;
+                弹头.Detonate();
+            }
+            
+            // 标记等待二阶段引爆并转入下一状态
+            等待二阶段引爆 = true;
+            当前状态 = 导弹状态.引爆最终;
+        }
+
+        /// <summary>
+        /// 处理引爆最终状态
+        /// </summary>
+        private void 处理引爆最终状态()
+        {
+            Echo("状态: 引爆二阶段...");
+            
+            // 如果上一帧已触发激发雷管组，本帧触发引爆雷管组
+            if (等待二阶段引爆)
+            {
+                foreach (var 弹头 in 引爆雷管组)
+                {
+                    弹头.IsArmed = true;
+                    弹头.Detonate();
+                }
+                等待二阶段引爆 = false;
+                
+                // 引爆完成，返回搜索状态
+                当前状态 = 导弹状态.搜索目标;
+            }
+        }
+
         #endregion
 
         #region 性能统计
@@ -1076,10 +1282,8 @@ namespace IngameScript
                 运行次数 = 0;
                 最大运行时间毫秒 = 0;
             }
-            最大运行时间毫秒 = 上次运行时间毫秒; // 初始化最大运行时间
             if (上次运行时间毫秒 > 最大运行时间毫秒)
                 最大运行时间毫秒 = 上次运行时间毫秒;
-
             // 计算平均运行时间
             double 平均运行时间毫秒 = 总运行时间毫秒 / 运行次数;
 

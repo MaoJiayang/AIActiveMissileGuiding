@@ -1,5 +1,5 @@
 ﻿R e a d m e
 -----------
-
-In this file you can include any instructions or other comments you want to have injected onto the 
-top of your final script. You can safely delete this file if you do not want any such comments.
+基于AI的主动弹制导脚本，ver-202506290357
+仅需AI飞行，AI攻击，RC，陀螺仪和推进器即可工作
+自动配置弹头引爆序列-支持殉爆箱

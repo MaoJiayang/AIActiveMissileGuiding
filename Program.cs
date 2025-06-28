@@ -74,7 +74,7 @@ namespace IngameScript
         #region 硬件组件
         private bool 已经初始化 = false;
         private IMyBlockGroup 方块组 = null;
-        private string 组名 = "导弹";
+        private string 组名前缀 = "导弹";
 
         // AI组件
         private IMyFlightMovementBlock 飞行块;
@@ -385,7 +385,7 @@ namespace IngameScript
                 foreach (var 组 in 所有组)
                 {
                     // 检查组名是否以指定组名开头
-                    if (组.Name.StartsWith(组名))
+                    if (组.Name.StartsWith(组名前缀))
                     {
                         // 检查该组是否包含当前可编程块
                         List<IMyTerminalBlock> 组内方块 = new List<IMyTerminalBlock>();
@@ -400,7 +400,7 @@ namespace IngameScript
                 }
                 if (方块组 == null)
                 {
-                    Echo($"未找到包含当前可编程块的、以'{组名}'开头的方块组");
+                    Echo($"未找到包含当前可编程块的、以'{组名前缀}'开头的方块组");
                     return false;
                 }
             }
@@ -503,7 +503,7 @@ namespace IngameScript
         {
             if (方块组 == null)
             {
-                Echo($"未找到组名为{组名}的方块组。");
+                Echo($"未找到组名为{组名前缀}的方块组。");
                 return false;
             }
 

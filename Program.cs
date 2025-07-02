@@ -841,7 +841,7 @@ namespace IngameScript
             // 配置战斗AI
             if (战斗块 != null)
             {
-                战斗块.TargetPriority = OffensiveCombatTargetPriority.Largest;
+                战斗块.TargetPriority = 参数们.目标优先级;
                 战斗块.UpdateTargetInterval = 参数们.战斗块更新间隔正常;
                 战斗块.Enabled = true;
                 战斗块.SelectedAttackPattern = 参数们.战斗块攻击模式; // 拦截模式

@@ -1,4 +1,5 @@
 using System;
+using VRage.Game.ModAPI.Ingame;
 
 namespace IngameScript
 {
@@ -164,7 +165,7 @@ namespace IngameScript
 
         #endregion
 
-        #region 飞行AI参数
+        #region AI参数
 
         /// <summary>
         /// 最大速度限制
@@ -179,12 +180,16 @@ namespace IngameScript
         /// <summary>
         /// 战斗块更新目标间隔(跟踪状态)
         /// </summary>
-        public int 战斗块更新间隔跟踪 { get; set; } = 5;
+        public int 战斗块更新间隔跟踪 { get; set; } = 10;
 
         /// <summary>
         /// 战斗块攻击模式
         /// </summary>
         public int 战斗块攻击模式 { get; set; } = 3; // 拦截模式
+        /// <summary>
+        /// 战斗块目标优先级
+        /// </summary>
+        public OffensiveCombatTargetPriority 目标优先级 { get; set; } = OffensiveCombatTargetPriority.Largest;
 
         #endregion
 
@@ -351,6 +356,14 @@ namespace IngameScript
                     case "战斗块攻击模式":
                         战斗块攻击模式 = int.Parse(参数值);
                         break;
+                    case "目标优先级":
+                        try
+                        {
+                            目标优先级 = (OffensiveCombatTargetPriority)Enum.Parse(
+                                typeof(OffensiveCombatTargetPriority), 参数值);
+                        }
+                        catch { }
+                        break;
                     case "推进器方向容差":
                         推进器方向容差 = double.Parse(参数值);
                         break;
@@ -410,6 +423,8 @@ namespace IngameScript
             配置.AppendLine("// 飞行AI参数");
             配置.AppendLine($"最大速度限制={最大速度限制}");
             配置.AppendLine($"战斗块攻击模式={战斗块攻击模式}");
+            配置.AppendLine($"目标优先级={目标优先级}");
+            配置.AppendLine("// 目标优先级可选项:Closest,Largest,Smallest");
             配置.AppendLine();
             配置.AppendLine("// 推进器控制参数");
             配置.AppendLine($"推进器方向容差={推进器方向容差}");

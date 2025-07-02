@@ -262,7 +262,7 @@ namespace IngameScript
                 Vector3D acc2 = (p1.Velocity - p2.Velocity) / dt2;
 
                 // 计算加速度变化率(jerk)
-                jerk = (acc1 - acc2) / (dt1 + dt2 * 0.5); // 加权时间差
+                jerk = (acc1 - acc2) / (dt1 + dt2) * 0.5;
                 useThirdOrder = true;  // 有足够信息使用三阶预测
 
                 // 取当前加速度
@@ -275,7 +275,7 @@ namespace IngameScript
                 Vector3D vel2 = (p1.Position - p2.Position) / dt2;
 
                 currentVel = vel1;
-                acceleration = (vel1 - vel2) / dt1;
+                acceleration = (vel1 - vel2) / (dt1 + dt2) * 0.5;
             }
 
             // 预测计算
@@ -521,176 +521,9 @@ namespace IngameScript
                 }
             }
         }
-        // /// <summary>
-        // /// 衡量预测性能的方法-数值版
-        // /// </summary>
-        // /// <param name="hasVelocityAvailable">是否有实测速度信息</param>
-        // /// <returns>预测误差的模长，如果数据不足则返回-1</returns>
-        // private void EvaluatePredictionPerformance(bool hasVelocityAvailable = false)
-        // {
-        //     if (_history.Count < 4)
-        //     {
-        //         linearPositionError = 114514.0;
-        //         circularPositionError = 114514.0;
-        //         combinationError = 114514.0;
-        //         return;
-        //     }
-
-        // int historyLength = _history.Count;
-        // // 计算均匀分布的索引位置
-        // int index2 = historyLength / 3;              // 大约1/3处
-        // int index3 = historyLength * 2 / 3;          // 大约2/3处
-        // // 确保索引不重复
-        // if (index2 == 0) index2 = 1;
-        // if (index3 <= index2) index3 = index2 + 1;
-
-        // // 获取节点1（最新记录）
-        // var node1 = _history.First;
-        // // 获取节点2
-        // var node2 = _history.First;
-        // for (int i = 0; i < index2; i++)
-        //     node2 = node2.Next;
-        // // 获取节点3
-        // var node3 = _history.First;
-        // for (int i = 0; i < index3; i++)
-        //     node3 = node3.Next;
-        // // 获取节点4（最旧记录）
-        // var node4 = _history.Last;
-
-        // var p1 = node1.Value;
-        // var p2 = node2.Value;
-        // var p3 = node3.Value;
-        // var p4 = node4.Value;
-
-        //     // 计算从记录2时刻到记录1时刻的预测时间
-        //     long predictionTime = p1.TimeStamp - p2.TimeStamp;
-
-        //     // 使用记录2,3,4预测记录1时刻的位置（不依赖类的历史记录状态）
-        //     SimpleTargetInfo predictedLinearTarget = PredictSecondOrder(predictionTime, hasVelocityAvailable, p2, p3, p4);
-        //     SimpleTargetInfo predictedCicularTarget = PredictCircularMotion(predictionTime, hasVelocityAvailable, p2, p3, p4);
-
-        //     // 计算预测位置与实际位置的差距，单位：米/毫秒
-        //     linearPositionError = (predictedLinearTarget.Position - p1.Position).Length() / predictionTime * 1000;
-        //     circularPositionError = (predictedCicularTarget.Position - p1.Position).Length() / predictionTime * 1000;
-
-        //     // 计算线性和圆周预测的加权组合误差
-        //     Vector3D predictedLinear = predictedLinearTarget.Position;
-        //     Vector3D predictedCircular = predictedCicularTarget.Position;
-        //     Vector3D groundTruth = p1.Position;
-
-        //     double tempLinearWeight, tempCircularWeight;
-        //     if (SolveLinearCombination(predictedLinear, predictedCircular, groundTruth, out tempLinearWeight, out tempCircularWeight))
-        //     {
-        //         // 验证组合结果
-        //         Vector3D optimalCombination = predictedLinear * tempLinearWeight + predictedCircular * tempCircularWeight;
-        //         combinationError = (optimalCombination - groundTruth).Length() / predictionTime * 1000;
-
-        //         // 误差保护：如果组合误差比单独预测的最大值还大，则使用更好的单独预测
-        //         double maxIndividualError = Math.Max(linearPositionError, circularPositionError);
-        //         if (combinationError > maxIndividualError)
-        //         {
-        //             // 选择误差较小的预测方法，设置权重为完全相信该方法
-        //             if (linearPositionError <= circularPositionError)
-        //             {
-        //                 linearWeight = 1.0;
-        //                 circularWeight = 0.0;
-        //                 combinationError = linearPositionError; // 更新组合误差为较小的个体误差
-        //             }
-        //             else
-        //             {
-        //                 linearWeight = 0.0;
-        //                 circularWeight = 1.0;
-        //                 combinationError = circularPositionError; // 更新组合误差为较小的个体误差
-        //             }
-        //         }
-        //         else
-        //         {
-        //             // 组合效果良好，使用计算出的权重
-        //             linearWeight = tempLinearWeight;
-        //             circularWeight = tempCircularWeight;
-        //         }
-        //     }
-        //     else
-        //     {
-        //         // 求解失败，使用更好的单独预测方法
-        //         if (linearPositionError <= circularPositionError)
-        //         {
-        //             linearWeight = 1.0;
-        //             circularWeight = 0.0;
-        //             combinationError = linearPositionError;
-        //         }
-        //         else
-        //         {
-        //             linearWeight = 0.0;
-        //             circularWeight = 1.0;
-        //             combinationError = circularPositionError;
-        //         }
-        //     }
-        // }
         #endregion
 
         #region Utilities
-        /// <summary>
-        /// 全局3D最小二乘法求解线性组合参数（带约束条件）
-        /// </summary>
-        /// <param name="predictedLinear">线性预测位置</param>
-        /// <param name="predictedCircular">圆周预测位置</param>
-        /// <param name="groundTruth">真实位置</param>
-        /// <param name="linearWeight">输出：线性预测权重</param>
-        /// <param name="circularWeight">输出：圆周预测权重</param>
-        /// <returns>求解是否成功</returns>
-        public static bool SolveLinearCombination(Vector3D predictedLinear, Vector3D predictedCircular, Vector3D groundTruth,
-            out double linearWeight, out double circularWeight)
-        {
-            linearWeight = 0.618;
-            circularWeight = 0.382;
-
-            // 构建全局3D最小二乘法方程
-            // 目标：min ||L*predictedLinear + C*predictedCircular - groundTruth||²
-
-            // 计算矩阵元素 A^T*A 和 A^T*b
-            double a11 = predictedLinear.LengthSquared();                              // ||L||²
-            double a12 = Vector3D.Dot(predictedLinear, predictedCircular);             // L·C
-            double a22 = predictedCircular.LengthSquared();                            // ||C||²
-
-            double b1 = Vector3D.Dot(predictedLinear, groundTruth);                    // L·T
-            double b2 = Vector3D.Dot(predictedCircular, groundTruth);                  // C·T
-
-            // 检查矩阵条件数
-            double det = a11 * a22 - a12 * a12;
-            double trace = a11 + a22;
-            double conditionNumber = (Math.Abs(det) > 1e-15) ? trace / Math.Abs(det) : double.PositiveInfinity;
-
-            // 如果条件数过大，说明两个预测向量过于相似
-            if (Math.Abs(det) < 1e-12 || conditionNumber > 1e8)
-            {
-                return false; // 矩阵奇异或病态
-            }
-
-            // 求解无约束最小二乘问题
-            double L_unconstrained = (a22 * b1 - a12 * b2) / det;
-            double C_unconstrained = (a11 * b2 - a12 * b1) / det;
-
-            // 应用约束条件：L + C = 1
-            double norm = L_unconstrained + C_unconstrained;
-
-            if (Math.Abs(norm) > 1e-12)
-            {
-                // 归一化使权重和为1
-                linearWeight = L_unconstrained / norm;
-                circularWeight = C_unconstrained / norm;
-            }
-            else
-            {
-                // 如果无约束解的和接近0，使用默认权重
-                linearWeight = 0.618;
-                circularWeight = 0.382;
-            }
-
-            return true;
-        }
-
-
         /// <summary>
         /// 限制时间差最小值
         /// </summary>

@@ -18,6 +18,9 @@ using VRage.Game.ModAPI.Ingame.Utilities;
 using VRage.Game.ObjectBuilders.Definitions;
 using VRageMath;
 // TODO: 测试预测时间是不是需要加一个更新间隔？
+// TODO: 待机-热发射逻辑加入重力发生器管理
+// TODO: 没有挂架时，待机解除的逻辑是？？
+// TODO：检查有时过载会大量超过能力的问题。--检查推力分配逻辑
 namespace IngameScript
 {
     public partial class Program : MyGridProgram
@@ -41,37 +44,18 @@ namespace IngameScript
 
         #endregion
 
-        #region 常量定义
+        #region 参数管理
 
-        // 制导相关常量
-        private const bool 滑翔模式 = false;
-        private double 导航常数 = 3.5;                     // 默认比例导航常数
-        private const double 最小向量长度 = 1e-6;                 // 向量最小有效长度
-        private const double 最小接近加速度 = 5;                // 最小接近加速度(m/s)
-        private const double 时间常数 = 1f / 60f;                // 时间常数(秒)
-        private const int 陀螺仪更新间隔 = 5;                     // 陀螺仪更新间隔(ticks)
-        private const int 推进器重新分类间隔 = 180;              // 推进器重新分类间隔(ticks)
-        private const double 角度误差最小值 = Math.PI / 180.0 * 0.25;  // 角度误差下限，小于此值视为对准
-
-        // 引爆相关常量
-        private const double 引爆距离阈值 = 5.0;                   // 接近引爆距离阈值(米)
-
-        // 热发射阶段相关常量
-        private const int 热发射持续帧数 = 120;                   // 热发射阶段持续时间(2秒)
-        private const string 分离推进器名称 = "分离";              // 分离推进器识别名称
+        // 参数管理器实例
+        private 参数管理器 参数们 = new 参数管理器();
         
-        // 状态切换时间常量
-        private const int 目标丢失超时帧数 = 180;                 // 目标丢失判定时间
-        private const int 预测制导持续帧数 = 300;                 // 预测制导持续时间
-        private const int 方块更新间隔 = 12000;                     // 重新初始化方块的间隔
-        // 备注：初始化方块更新会让不在一个网格的导弹组失去联系
         #endregion
 
         #region 状态变量
-
         private 导弹状态 导弹当前状态 = 导弹状态.待机状态;
         private 导弹状态 导弹上次状态 = 导弹状态.待机状态;
         private Vector3D 上次目标位置 = Vector3D.Zero;
+        private double 导航常数; // 导航常数将在初始化时设置
         private long 上次目标更新时间 = 0;
         private int 预测开始帧数 = 0;
         private int 热发射开始帧数 = 0;
@@ -83,7 +67,6 @@ namespace IngameScript
         #region 硬件组件
         private bool 已经初始化 = false;
         private IMyBlockGroup 方块组 = null;
-        private string 组名前缀 = "导弹";
 
         // AI组件
         private IMyFlightMovementBlock 飞行块;
@@ -125,27 +108,26 @@ namespace IngameScript
             {"XP", 0}, {"XN", 0}, {"YP", 0}, {"YN", 0}, {"ZP", 0}, {"ZN", 0}
         };
         private bool 推进器已分类 = false;
-        private bool 陀螺仪已清零 = false;
 
         #endregion
 
         #region PID控制系统
 
         // PID控制器 - 外环(角度误差->期望角速度)
-        private PID 偏航外环 = new PID(4, 0, 0, 时间常数 * 陀螺仪更新间隔);// );//
-        private PID 俯仰外环 = new PID(4, 0, 0, 时间常数 * 陀螺仪更新间隔);
-        private PID 横滚外环 = new PID(4, 0, 0, 时间常数 * 陀螺仪更新间隔);
+        private PID 偏航外环;
+        private PID 俯仰外环;
+        private PID 横滚外环;
 
         // PID控制器 - 内环(角速度误差->陀螺仪设定)
-        private PID 偏航内环PD = new PID(12, 0.005, 0.2, 时间常数 * 陀螺仪更新间隔);
-        private PID 俯仰内环PD = new PID(12, 0.005, 0.2, 时间常数 * 陀螺仪更新间隔);
-        private PID 横滚内环PD = new PID(12, 0.005, 0.2, 时间常数 * 陀螺仪更新间隔);
+        private PID 偏航内环PD;
+        private PID 俯仰内环PD;
+        private PID 横滚内环PD;
 
         #endregion
 
         #region 目标跟踪系统
 
-        private TargetTracker 目标跟踪器 = new TargetTracker();
+        private TargetTracker 目标跟踪器;
 
         #endregion
 
@@ -162,9 +144,43 @@ namespace IngameScript
 
         public Program()
         {
+            // 初始化参数管理器（可以从Me.CustomData读取配置）
+            if (!string.IsNullOrWhiteSpace(Me.CustomData))
+            {
+                参数们 = new 参数管理器(Me.CustomData);
+            }
+            else Me.CustomData = 参数们.生成配置字符串();
+
+            // 初始化PID控制器
+            初始化PID控制器();
+
+            // 初始化目标跟踪器
+            目标跟踪器 = new TargetTracker(参数们.目标历史最大长度);
+
+            // 初始化导航常数
+            导航常数 = 参数们.导航常数初始值;
+
             // 设置更新频率为每tick执行
             Runtime.UpdateFrequency = UpdateFrequency.Update1;
             已经初始化 = 初始化硬件();
+        }
+
+        /// <summary>
+        /// 初始化PID控制器
+        /// </summary>
+        private void 初始化PID控制器()
+        {
+            double pid时间常数 = 参数们.获取PID时间常数();
+
+            // 初始化外环PID控制器
+            偏航外环 = new PID(参数们.偏航外环参数.P系数, 参数们.偏航外环参数.I系数, 参数们.偏航外环参数.D系数, pid时间常数);
+            俯仰外环 = new PID(参数们.俯仰外环参数.P系数, 参数们.俯仰外环参数.I系数, 参数们.俯仰外环参数.D系数, pid时间常数);
+            横滚外环 = new PID(参数们.横滚外环参数.P系数, 参数们.横滚外环参数.I系数, 参数们.横滚外环参数.D系数, pid时间常数);
+
+            // 初始化内环PID控制器
+            偏航内环PD = new PID(参数们.偏航内环参数.P系数, 参数们.偏航内环参数.I系数, 参数们.偏航内环参数.D系数, pid时间常数);
+            俯仰内环PD = new PID(参数们.俯仰内环参数.P系数, 参数们.俯仰内环参数.I系数, 参数们.俯仰内环参数.D系数, pid时间常数);
+            横滚内环PD = new PID(参数们.横滚内环参数.P系数, 参数们.横滚内环参数.I系数, 参数们.横滚内环参数.D系数, pid时间常数);
         }
 
         public void Main(string argument, UpdateType updateSource)
@@ -177,13 +193,12 @@ namespace IngameScript
                 return;
             }
             更新计数器 = (更新计数器 + 1) % int.MaxValue;
-            if (更新计数器 % 方块更新间隔 == 0)
+            if (更新计数器 % 参数们.方块更新间隔 == 0)
             {
                 已经初始化 = 初始化硬件();
             }
             // 获取目标位置
             Vector3D 当前目标位置 = 从飞行块获取目标();
-
             // 更新目标状态
             更新目标状态(当前目标位置, argument);
 
@@ -282,7 +297,6 @@ namespace IngameScript
             {
                 bool 传感器触发 = 检查传感器触发();
                 bool 距离触发 = 检查距离触发();
-                Echo($"引爆触发: 传感器={传感器触发}, 距离={距离触发}");
                 if (传感器触发 || 距离触发)
                 {
                     导弹当前状态 = 导弹状态.引爆激发;
@@ -303,7 +317,7 @@ namespace IngameScript
 
                 case 导弹状态.热发射阶段:
                     // 热发射阶段超时后进入搜索状态
-                    if (更新计数器 - 热发射开始帧数 > 热发射持续帧数)
+                    if (更新计数器 - 热发射开始帧数 > 参数们.热发射持续帧数)
                     {
                         导弹当前状态 = 导弹状态.搜索目标;
                     }
@@ -316,7 +330,7 @@ namespace IngameScript
                         导弹当前状态 = 导弹状态.跟踪目标;
                         上次目标位置 = 当前目标位置;
                         上次目标更新时间 = 更新计数器;
-                        战斗块.UpdateTargetInterval = 5; // 降低战斗块更新目标间隔
+                        战斗块.UpdateTargetInterval = 参数们.战斗块更新间隔跟踪; // 降低战斗块更新目标间隔
                     }
                     break;
 
@@ -336,7 +350,7 @@ namespace IngameScript
                     else
                     {
                         // 目标存在但位置未更新，检查超时
-                        if (更新计数器 - 上次目标更新时间 <= 目标丢失超时帧数)
+                        if (更新计数器 - 上次目标更新时间 <= 参数们.目标位置不变最大帧数)
                         {
                             导弹当前状态 = 导弹状态.预测制导;
                             预测开始帧数 = 更新计数器;
@@ -352,7 +366,7 @@ namespace IngameScript
                         上次目标位置 = 当前目标位置;
                         上次目标更新时间 = 更新计数器;
                     }
-                    else if (更新计数器 - 预测开始帧数 > 预测制导持续帧数)
+                    else if (更新计数器 - 预测开始帧数 > 参数们.预测制导持续帧数)
                     {
                         // 预测制导超时，返回搜索状态
                         导弹当前状态 = 导弹状态.搜索目标;
@@ -377,7 +391,7 @@ namespace IngameScript
             Echo("状态: 待机中，等待挂架分离...");
 
             // 以方块更新间隔来处理组件状态设置
-            if(导弹上次状态 != 导弹状态.待机状态 || 更新计数器 % 方块更新间隔 == 1)
+            if (导弹上次状态 != 导弹状态.待机状态 || 更新计数器 % 参数们.方块更新间隔 == 1)
             {
                 // 关闭飞控AI组件 - 待机状态全部为false
                 if (飞行块 != null)
@@ -424,7 +438,7 @@ namespace IngameScript
             Echo("状态: 热发射阶段");
 
             // 以方块更新间隔来处理组件状态设置
-            if(导弹上次状态 != 导弹状态.热发射阶段)
+            if (导弹上次状态 != 导弹状态.热发射阶段)
             {
                 // 恢复气罐自动模式
                 if (氢气罐系统可用)
@@ -460,7 +474,7 @@ namespace IngameScript
             }
 
             // 检查热发射阶段是否结束
-            if (更新计数器 - 热发射开始帧数 >= 热发射持续帧数)
+            if (更新计数器 - 热发射开始帧数 >= 参数们.热发射持续帧数)
             {
                 激活导弹系统();
             }
@@ -481,14 +495,14 @@ namespace IngameScript
                 战斗块.Enabled = true;
                 战斗块.ApplyAction("ActivateBehavior_On");
             }
-            
+
             // 启用所有推进器
             foreach (var 推进器 in 推进器列表)
             {
                 推进器.Enabled = true;
                 推进器.ThrustOverride = 0f; // 重置推力覆盖
             }
-            
+
             // 启用陀螺仪
             foreach (var 陀螺仪 in 陀螺仪列表)
             {
@@ -505,7 +519,7 @@ namespace IngameScript
             Echo("状态: 搜索目标中...");
             if (目标跟踪器.GetHistoryCount() > 0 || 更新计数器 < 60)
             {
-                战斗块.UpdateTargetInterval = 0; // 恢复战斗块更新目标间隔          
+                战斗块.UpdateTargetInterval = 参数们.战斗块更新间隔正常; // 恢复战斗块更新目标间隔          
                 // 停止所有推进器
                 foreach (var 推进器 in 推进器列表)
                 {
@@ -530,7 +544,7 @@ namespace IngameScript
             // 更新目标跟踪器
             if (控制器 != null)
             {
-                long 当前时间戳 = (long)Math.Round(更新计数器 * 时间常数 * 1000);
+                long 当前时间戳 = (long)Math.Round(更新计数器 * 参数们.时间常数 * 1000);
                 // 添加到目标跟踪器
                 目标跟踪器.UpdateTarget(目标位置, Vector3D.Zero, 当前时间戳);
                 // 获取最新目标信息进行制导
@@ -549,7 +563,7 @@ namespace IngameScript
             if (控制器 != null && 目标跟踪器.GetHistoryCount() > 0)
             {
                 // 使用预测位置进行制导
-                long 预测时间毫秒 = (long)Math.Round((更新计数器 - 上次目标更新时间) * 时间常数 * 1000);
+                long 预测时间毫秒 = (long)Math.Round((更新计数器 - 上次目标更新时间) * 参数们.时间常数 * 1000);
                 var 预测目标 = 目标跟踪器.PredictFutureTargetInfo(预测时间毫秒);
 
                 SimpleTargetInfo 目标信息 = new SimpleTargetInfo(预测目标.Position, 预测目标.Velocity, 预测目标.TimeStamp);
@@ -574,7 +588,7 @@ namespace IngameScript
                 foreach (var 组 in 所有组)
                 {
                     // 检查组名是否以指定组名开头
-                    if (组.Name.StartsWith(组名前缀))
+                    if (组.Name.StartsWith(参数们.组名前缀))
                     {
                         // 检查该组是否包含当前可编程块
                         List<IMyTerminalBlock> 组内方块 = new List<IMyTerminalBlock>();
@@ -589,7 +603,7 @@ namespace IngameScript
                 }
                 if (方块组 == null)
                 {
-                    Echo($"未找到包含当前可编程块的、以'{组名前缀}'开头的方块组");
+                    Echo($"未找到包含当前可编程块的、以'{参数们.组名前缀}'开头的方块组");
                     return false;
                 }
             }
@@ -623,20 +637,6 @@ namespace IngameScript
 
             if (初始化完整)
             {
-                Echo($"硬件初始化完成: 控制器={控制器?.CustomName}, 推进器={推进器列表.Count}, 陀螺仪={陀螺仪列表.Count}");
-                if (引爆系统可用)
-                {
-                    Echo($"引爆系统: 传感器={传感器列表.Count}, 激发雷管={激发雷管组.Count}, 引爆雷管={引爆雷管组.Count}");
-                }
-                if (挂架系统可用)
-                {
-                    Echo($"挂架系统: 连接器={连接器列表.Count}, 合并块={合并方块列表.Count}, 转子={转子列表.Count}");
-                }
-                if (氢气罐系统可用)
-                {
-                    Echo($"氢气罐系统: 氢气罐={氢气罐列表.Count}");
-                }
-                Echo($"分离推进器: {分离推进器列表.Count}");
                 分类推进器(控制器);
             }
             else
@@ -747,7 +747,7 @@ namespace IngameScript
             foreach (var 推进器 in 推进器列表)
             {
                 string 名称 = 推进器.CustomName.ToLower();
-                if (名称.Contains(分离推进器名称))
+                if (名称.Contains(参数们.分离推进器名称))
                 {
                     分离推进器列表.Add(推进器);
                 }
@@ -803,7 +803,7 @@ namespace IngameScript
         {
             if (方块组 == null)
             {
-                Echo($"未找到组名为{组名前缀}的方块组。");
+                Echo($"未找到组名为{参数们.组名前缀}的方块组。");
                 return false;
             }
 
@@ -831,7 +831,7 @@ namespace IngameScript
             // 配置飞行AI
             if (飞行块 != null)
             {
-                飞行块.SpeedLimit = 200f;       // 最大速度
+                飞行块.SpeedLimit = 参数们.最大速度限制;       // 最大速度
                 飞行块.AlignToPGravity = false; // 不与重力对齐
                 飞行块.Enabled = false;         // 关闭方块
                 飞行块.ApplyAction("ActivateBehavior_On");
@@ -842,9 +842,9 @@ namespace IngameScript
             if (战斗块 != null)
             {
                 战斗块.TargetPriority = OffensiveCombatTargetPriority.Largest;
-                战斗块.UpdateTargetInterval = 0;
+                战斗块.UpdateTargetInterval = 参数们.战斗块更新间隔正常;
                 战斗块.Enabled = true;
-                战斗块.SelectedAttackPattern = 3; // 拦截模式
+                战斗块.SelectedAttackPattern = 参数们.战斗块攻击模式; // 拦截模式
                 战斗块.ApplyAction("ActivateBehavior_On");
 
                 IMyAttackPatternComponent 攻击模式;
@@ -943,7 +943,7 @@ namespace IngameScript
             Vector3D 导弹到目标 = 目标位置 - 导弹位置;
             double 距离 = 导弹到目标.Length();
             double 导弹速度长度 = 导弹速度.Length();
-            if (距离 < 最小向量长度)
+            if (距离 < 参数们.最小向量长度)
                 return Vector3D.Zero; // 防止除零错误
 
             Vector3D 视线单位向量 = 导弹到目标 / 距离;
@@ -959,7 +959,7 @@ namespace IngameScript
             // ----- 步骤5: 计算真比例导航基础控制量 -----
             // 计算基础比例导航加速度 (PN核心公式)
             Vector3D 导弹速度单位向量;
-            if (导弹速度长度 < 最小向量长度)
+            if (导弹速度长度 < 参数们.最小向量长度)
             {
                 // 当导弹速度过小时，使用默认方向
                 导弹速度单位向量 = new Vector3D(1, 1, 1).Normalized();
@@ -972,7 +972,7 @@ namespace IngameScript
 
             double 相对速度大小 = 相对速度.Length();
             Vector3D 比例导航加速度;
-            if (滑翔模式)
+            if (参数们.滑翔模式)
             {
                 比例导航加速度 = 导航常数 * 相对速度大小 * Vector3D.Cross(视线角速度, 导弹速度单位向量);
             }
@@ -983,7 +983,7 @@ namespace IngameScript
 
             // ----- 步骤6: 计算接近分量并执行重力补偿后处理 -----
             Vector3D 最终加速度命令;
-            if (导弹到目标.Length() > 最小向量长度)
+            if (导弹到目标.Length() > 参数们.最小向量长度)
             {
                 // 使用重力补偿后处理的接近加速度计算
                 最终加速度命令 = 计算接近加速度并重力补偿(导弹到目标, 比例导航加速度, 控制器);
@@ -1055,18 +1055,20 @@ namespace IngameScript
 
             // ----- 步骤5: 计算接近加速度 -----
             Vector3D 接近加速度;
-            if (径向分量平方 <= 0)
+            if (世界最大加速度模长平方 <= 比例导航加速度模长平方)
             {
                 // 推进器能力不足，使用最小接近加速度
-                接近加速度 = 最小接近加速度 * 视线单位向量;
+                接近加速度 = 参数们.最小接近加速度 * 视线单位向量;
+                导航常数 = 参数们.计算导航常数(1e6, 视线.Length());
             }
             else
             {
                 double 径向加速度大小 = Math.Sqrt(径向分量平方);
-                径向加速度大小 = Math.Max(径向加速度大小, 最小接近加速度);
+                径向加速度大小 = Math.Max(径向加速度大小, 参数们.最小接近加速度);
                 接近加速度 = 径向加速度大小 * 视线单位向量;
+                导航常数 = 参数们.计算导航常数(Math.Sqrt(世界最大加速度模长平方), 视线.Length());
             }
-
+            
             // ----- 步骤6: 合成飞行方向加速度 -----
             Vector3D 飞行方向加速度 = 比例导航加速度 + 接近加速度;
 
@@ -1074,7 +1076,7 @@ namespace IngameScript
             Vector3D 重力加速度 = 控制器.GetNaturalGravity();
             Vector3D 最终加速度命令;
 
-            if (飞行方向加速度.LengthSquared() > 最小向量长度)
+            if (飞行方向加速度.LengthSquared() > 参数们.最小向量长度)
             {
                 // 1. 以合成后的加速度方向作为导弹飞行方向
                 Vector3D 飞行方向单位向量 = Vector3D.Normalize(飞行方向加速度);
@@ -1095,59 +1097,52 @@ namespace IngameScript
 
             // 输出诊断信息
             Echo($"[推进器] 导弹主过载: {Math.Sqrt(世界最大加速度模长平方):n1} m/s²");
-            导航常数 = Math.Sqrt(世界最大加速度模长平方) / 10.0;
-            导航常数 = Math.Min(Math.Max(导航常数, 2), 6); // 确保常数在合理范围内
             Echo($"[推进器] 比例导航常数: {导航常数:n1}");
 
             return 最终加速度命令;
         }
 
         /// <summary>
-        /// 只使用位置信息计算三点加速度
+        /// 最小加速度平方型最优制导
         /// </summary>
-        private Vector3D 计算加速度(SimpleTargetInfo 最新, SimpleTargetInfo 中间, SimpleTargetInfo 最旧)
+        /// <param name="控制器">飞船控制器</param>
+        /// <param name="目标信息">目标信息</param>
+        /// <returns>所需的世界坐标系加速度矢量</returns>
+        private Vector3D 最优制导(IMyShipController 控制器, SimpleTargetInfo? 目标信息)
         {
-            // 计算时间间隔（转换为秒）
-            double t1 = 最旧.TimeStamp / 1000.0;
-            double t2 = 中间.TimeStamp / 1000.0;
-            double t3 = 最新.TimeStamp / 1000.0;
+            if (控制器 == null || !目标信息.HasValue)
+                return Vector3D.Zero;
 
-            // 检查时间间隔是否有效
-            double dt12 = t2 - t1;
-            double dt23 = t3 - t2;
-            double dt13 = t3 - t1;
-            if (dt12 <= 0 || dt23 <= 0 || dt13 <= 0) return Vector3D.Zero;
+            // 导弹状态
+            Vector3D mPos = 控制器.GetPosition();
+            Vector3D mVel = 控制器.GetShipVelocities().LinearVelocity;
 
-            // 获取位置向量
-            Vector3D P1 = 最旧.Position;
-            Vector3D P2 = 中间.Position;
-            Vector3D P3 = 最新.Position;
+            // 目标状态
+            var tgt = 目标信息.Value;
+            Vector3D tPos = tgt.Position;
+            Vector3D tVel = tgt.Velocity;
 
-            Vector3D 加速度;
+            // 相对位置与速度
+            Vector3D r = tPos - mPos;
+            double dist = r.Length();
+            if (dist < 参数们.最小向量长度)
+                return Vector3D.Zero;
 
-            double 系数1 = 2.0 / (dt12 * dt13);
-            double 系数2 = -2.0 / (dt12 * dt23);
-            double 系数3 = 2.0 / (dt23 * dt13);
+            Vector3D rHat = r / dist;
+            Vector3D vRel = tVel - mVel;
 
-            加速度 = 系数1 * P1 + 系数2 * P2 + 系数3 * P3;
-            return 加速度;
-        }
-        private Vector3D 计算速度(SimpleTargetInfo 最新, SimpleTargetInfo 最旧)
-        {
-            // 计算时间间隔（转换为秒）
-            double t1 = 最旧.TimeStamp / 1000.0;
-            double t2 = 最新.TimeStamp / 1000.0;
+            // 估算剩余飞行时间：取视线方向上的速度分量
+            double closingSpeed = Math.Max(Vector3D.Dot(rHat, mVel), 参数们.最小向量长度);
+            double T = dist / closingSpeed;
 
-            // 检查时间间隔是否有效
-            if (t2 <= t1) return Vector3D.Zero;
+            // 最小飞行时间保护
+            T = Math.Max(T, 0.1);
 
-            // 获取位置向量
-            Vector3D P1 = 最旧.Position;
-            Vector3D P2 = 最新.Position;
-
-            // 计算速度向量
-            Vector3D 速度 = (P2 - P1) / (t2 - t1);
-            return 速度;
+            // 最优加速度（最小 ∫a² dt 解的初值）
+            // u0 = 2*(3 r + 2 vRel * T) / T²
+            Vector3D aOpt = (6.0 * r + 4.0 * vRel * T) / (T * T);
+            aOpt = 计算接近加速度并重力补偿(r, aOpt, 控制器);
+            return aOpt;
         }
         /// <summary>
         /// 计算目标转向角度
@@ -1189,7 +1184,7 @@ namespace IngameScript
         {
             // 检查角度误差是否在阈值范围内
             double 角度误差大小 = 目标角度PYR.Length();
-            if (角度误差大小 < 角度误差最小值)
+            if (角度误差大小 < 参数们.角度误差最小值)
             {
                 // 角度误差很小，停止陀螺仪以减少抖动
                 foreach (var 陀螺仪 in 陀螺仪列表)
@@ -1203,7 +1198,7 @@ namespace IngameScript
             }
 
             // 仅在指定更新间隔执行，减少过度控制
-            if (更新计数器 % 陀螺仪更新间隔 != 0)
+            if (更新计数器 % 参数们.陀螺仪更新间隔 != 0)
                 return;
             // ----------------- 外环：角度误差 → 期望角速度 (世界坐标系) -----------------
             // 使用PD控制器将角度误差转换为期望角速度
@@ -1254,7 +1249,7 @@ namespace IngameScript
             Vector3D 本地加速度 = Vector3D.TransformNormal(绝对加速度, MatrixD.Transpose(控制器.WorldMatrix));
 
             // 仅在第一次调用或推进器列表发生变化时进行分类
-            if (!推进器已分类 || 更新计数器 % 推进器重新分类间隔 == 0)
+            if (!推进器已分类 || 更新计数器 % 参数们.推进器重新分类间隔 == 0)
             {
                 分类推进器(控制器);
                 推进器已分类 = true;
@@ -1280,7 +1275,6 @@ namespace IngameScript
             }
 
             // 遍历所有推进器，根据其局部推进方向归类
-            const double 方向容差 = 0.8; // 方向余弦相似度阈值
             foreach (var 推进器 in 推进器列表)
             {
                 // 将推进器的世界方向转换到飞船本地坐标系
@@ -1288,17 +1282,17 @@ namespace IngameScript
 
                 // 根据推进方向分类并累加推力
                 string 分类轴向 = null;
-                if (Vector3D.Dot(本地推力方向, -Vector3D.UnitX) > 方向容差)
+                if (Vector3D.Dot(本地推力方向, -Vector3D.UnitX) > 参数们.推进器方向容差)
                     分类轴向 = "XP";
-                else if (Vector3D.Dot(本地推力方向, Vector3D.UnitX) > 方向容差)
+                else if (Vector3D.Dot(本地推力方向, Vector3D.UnitX) > 参数们.推进器方向容差)
                     分类轴向 = "XN";
-                else if (Vector3D.Dot(本地推力方向, -Vector3D.UnitY) > 方向容差)
+                else if (Vector3D.Dot(本地推力方向, -Vector3D.UnitY) > 参数们.推进器方向容差)
                     分类轴向 = "YP";
-                else if (Vector3D.Dot(本地推力方向, Vector3D.UnitY) > 方向容差)
+                else if (Vector3D.Dot(本地推力方向, Vector3D.UnitY) > 参数们.推进器方向容差)
                     分类轴向 = "YN";
-                else if (Vector3D.Dot(本地推力方向, -Vector3D.UnitZ) > 方向容差)
+                else if (Vector3D.Dot(本地推力方向, -Vector3D.UnitZ) > 参数们.推进器方向容差)
                     分类轴向 = "ZP";
-                else if (Vector3D.Dot(本地推力方向, Vector3D.UnitZ) > 方向容差)
+                else if (Vector3D.Dot(本地推力方向, Vector3D.UnitZ) > 参数们.推进器方向容差)
                     分类轴向 = "ZN";
 
                 if (分类轴向 != null)
@@ -1396,13 +1390,12 @@ namespace IngameScript
         /// 测试陀螺仪控制
         /// </summary>
         private void 旋转控制测试(string argument)
-        {
-            // 根据参数更新目标到跟踪器中
-            if (!string.IsNullOrEmpty(argument))
-            {
-                long 当前时间戳 = (long)Math.Round(更新计数器 * 时间常数 * 1000);
-                Vector3D 测试目标位置 = Vector3D.Zero;
-                bool 需要更新目标 = false;
+        {                // 根据参数更新目标到跟踪器中
+                if (!string.IsNullOrEmpty(argument))
+                {
+                    long 当前时间戳 = (long)Math.Round(更新计数器 * 参数们.时间常数 * 1000);
+                    Vector3D 测试目标位置 = Vector3D.Zero;
+                    bool 需要更新目标 = false;
 
                 if (argument == "test")
                 {
@@ -1476,7 +1469,7 @@ namespace IngameScript
                 Vector3D 导弹位置 = 控制器.GetPosition();
                 Vector3D 到目标向量 = 最新目标位置 - 导弹位置;
 
-                if (到目标向量.Length() > 最小向量长度)
+                if (到目标向量.Length() > 参数们.最小向量长度)
                 {
                     Vector3D 目标角度 = 计算目标角度(到目标向量 * 10, 控制器);
                     应用陀螺仪控制(目标角度);
@@ -1529,7 +1522,7 @@ namespace IngameScript
             Vector3D 当前位置 = 控制器.GetPosition();
             double 距离 = Vector3D.Distance(当前位置, 上次目标位置);
 
-            return 距离 <= 引爆距离阈值;
+            return 距离 <= 参数们.引爆距离阈值;
         }
 
         /// <summary>
@@ -1586,7 +1579,7 @@ namespace IngameScript
 
             总运行时间毫秒 += 上次运行时间毫秒;
             运行次数 = (运行次数 + 1) % int.MaxValue;
-            if (运行次数 % 600 == 0)
+            if (运行次数 % 参数们.性能统计重置间隔 == 0)
             {
                 // 每600次运行重置统计信息
                 总运行时间毫秒 = 0;

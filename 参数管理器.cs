@@ -180,7 +180,7 @@ namespace IngameScript
         /// <summary>
         /// 战斗块更新目标间隔(跟踪状态)
         /// </summary>
-        public int 战斗块更新间隔跟踪 { get; set; } = 10;
+        public int 战斗块更新间隔跟踪 { get; set; } = 30;
 
         /// <summary>
         /// 战斗块攻击模式

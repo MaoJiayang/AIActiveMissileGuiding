@@ -259,7 +259,7 @@ namespace IngameScript
         public double 计算导航常数(double 最大加速度, double 目标距离)
         {
             double 计算值 = 最大加速度 / 10.0;
-            计算值 *= Math.Max(目标距离 / 500, 0.5); // 距离越远，导航常数越大
+            计算值 *= Math.Max(目标距离 / 1000, 0.618); // 距离越远，导航常数越大
             return Math.Min(Math.Max(计算值, 导航常数最小值), 导航常数最大值);
         }
 

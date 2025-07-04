@@ -43,7 +43,7 @@ namespace IngameScript
         /// <summary>
         /// 导航常数最小值
         /// </summary>
-        public double 导航常数最小值 { get; set; } = 2;
+        public double 导航常数最小值 { get; set; } = 3;
 
         /// <summary>
         /// 导航常数最大值

@@ -21,6 +21,7 @@ using VRageMath;
 // TODO: 没有挂架时，待机解除的逻辑是？？
 // TODO：动态比例导引常数的距离逻辑中，将最大距离从2500改到发射点距离目标的距离。
 // TODO: 参数管理器版本控制，自动删除过期版本存储的配置数据并添加新的
+// TODO: 存在Z正推进器会导致Z正Z负一起发力
 namespace IngameScript
 {
     public partial class Program : MyGridProgram
@@ -55,6 +56,7 @@ namespace IngameScript
         private 导弹状态 导弹当前状态 = 导弹状态.待机状态;
         private 导弹状态 导弹上次状态 = 导弹状态.待机状态;
         private Vector3D 上次目标位置 = Vector3D.Zero;
+        private bool 角度误差在容忍范围内 = false;
         private double 导航常数; // 导航常数将在初始化时设置
         private long 上次目标更新时间 = 0;
         private int 预测开始帧数 = 0;
@@ -259,7 +261,8 @@ namespace IngameScript
         {
             bool 有有效目标 = !当前目标位置.Equals(Vector3D.NegativeInfinity);
             bool 目标位置已改变 = !当前目标位置.Equals(上次目标位置);
-            bool 导弹正运行 = 导弹当前状态 != 导弹状态.待机状态 && 导弹当前状态 != 导弹状态.热发射阶段;
+            bool 导弹正运行 = 导弹当前状态 != 导弹状态.待机状态 && 导弹当前状态 != 导弹状态.热发射阶段 &&
+                            导弹当前状态 != 导弹状态.引爆激发 && 导弹当前状态 != 导弹状态.引爆最终;
             导弹上次状态 = 导弹当前状态;
             Echo($"存在目标：{有有效目标}, 位置更新：{目标位置已改变}");
 
@@ -455,6 +458,8 @@ namespace IngameScript
                 // 恢复气罐自动模式
                 if (氢气罐系统可用)
                 {
+                    // NaN氢气罐兼容
+                    氢气罐列表.RemoveAll(罐 => double.IsNaN(罐.Capacity) || double.IsNaN(罐.FilledRatio));
                     foreach (var 气罐 in 氢气罐列表)
                     {
                         气罐.Stockpile = false; // 关闭储存模式（自动）
@@ -1211,7 +1216,7 @@ namespace IngameScript
         {
             // 检查角度误差是否在阈值范围内
             double 角度误差大小 = 目标角度PYR.Length();
-            if (角度误差大小 < 参数们.角度误差最小值)
+            if (角度误差大小 < 参数们.角度误差最小值 && !角度误差在容忍范围内)
             {
                 // 角度误差很小，停止陀螺仪以减少抖动
                 foreach (var 陀螺仪 in 陀螺仪列表)
@@ -1221,9 +1226,17 @@ namespace IngameScript
                     陀螺仪.Roll = 0f;
                     陀螺仪.GyroOverride = true; // 保持覆盖状态但输出为零
                 }
+                // 重置所有PID控制器
+                偏航外环.Reset();
+                俯仰外环.Reset();
+                横滚外环.Reset();
+                偏航内环PD.Reset();
+                俯仰内环PD.Reset();
+                横滚内环PD.Reset();
+                角度误差在容忍范围内 = true;
                 return;
             }
-
+            角度误差在容忍范围内 = false;
             // 仅在指定更新间隔执行，减少过度控制
             if (更新计数器 % 参数们.陀螺仪更新间隔 != 0)
                 return;
@@ -1269,6 +1282,8 @@ namespace IngameScript
         /// </summary>
         private void 控制推进器(Vector3D 绝对加速度, IMyShipController 控制器)
         {
+            if (更新计数器 % 参数们.陀螺仪更新间隔 != 0)
+                return;
             // 获取飞船质量（单位：kg）
             double 飞船质量 = 控制器.CalculateShipMass().PhysicalMass;
 
@@ -1486,6 +1501,7 @@ namespace IngameScript
                 if (需要更新目标)
                 {
                     目标跟踪器.UpdateTarget(测试目标位置, Vector3D.Zero, 当前时间戳);
+                    陀螺仪列表.ForEach(g => g.Enabled = true); // 确保陀螺仪开启
                 }
             }
 

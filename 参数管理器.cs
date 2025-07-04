@@ -33,7 +33,7 @@ namespace IngameScript
         /// <summary>
         /// 角度误差下限，小于此值视为对准
         /// </summary>
-        public double 角度误差最小值 { get; set; } = Math.PI / 180.0 * 0.25;
+        public double 角度误差最小值 { get; set; } = Math.PI / 180.0 * 0.2;
 
         /// <summary>
         /// 导航常数初始值
@@ -78,7 +78,7 @@ namespace IngameScript
         #region 状态切换时间参数
 
         /// <summary>
-        /// 陀螺仪更新间隔(ticks)
+        /// 陀螺仪(现在是动力系统）更新间隔(ticks)
         /// </summary>
         public int 陀螺仪更新间隔 { get; set; } = 5;
 
@@ -140,19 +140,19 @@ namespace IngameScript
         public PID参数 横滚外环参数 { get; set; } = new PID参数(4, 0, 0);
 
         /// <summary>
-        /// 偏航内环PID参数
+        /// 偏航内环PID参数0.005
         /// </summary>
-        public PID参数 偏航内环参数 { get; set; } = new PID参数(12, 0.005, 0.2);
+        public PID参数 偏航内环参数 { get; set; } = new PID参数(21, 0.008, 0.9);
 
         /// <summary>
         /// 俯仰内环PID参数
         /// </summary>
-        public PID参数 俯仰内环参数 { get; set; } = new PID参数(12, 0.005, 0.2);
+        public PID参数 俯仰内环参数 { get; set; } = new PID参数(21, 0.008, 0.9);
 
         /// <summary>
         /// 横滚内环PID参数
         /// </summary>
-        public PID参数 横滚内环参数 { get; set; } = new PID参数(12, 0.005, 0.2);
+        public PID参数 横滚内环参数 { get; set; } = new PID参数(21, 0.008, 0.9);
 
         #endregion
 

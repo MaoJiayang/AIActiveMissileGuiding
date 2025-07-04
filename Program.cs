@@ -17,10 +17,10 @@ using VRage.Game.ModAPI.Ingame;
 using VRage.Game.ModAPI.Ingame.Utilities;
 using VRage.Game.ObjectBuilders.Definitions;
 using VRageMath;
-// TODO: 测试预测时间是不是需要加一个更新间隔？
 // TODO: 待机-热发射逻辑加入重力发生器管理
 // TODO: 没有挂架时，待机解除的逻辑是？？
-// TODO：检查有时过载会大量超过能力的问题。--检查推力分配逻辑
+// TODO：动态比例导引常数的距离逻辑中，将最大距离从2500改到发射点距离目标的距离。
+// TODO: 参数管理器版本控制，自动删除过期版本存储的配置数据并添加新的
 namespace IngameScript
 {
     public partial class Program : MyGridProgram
@@ -48,7 +48,7 @@ namespace IngameScript
 
         // 参数管理器实例
         private 参数管理器 参数们 = new 参数管理器();
-        
+
         #endregion
 
         #region 状态变量
@@ -76,7 +76,7 @@ namespace IngameScript
         private IMyShipController 控制器;
         private List<IMyThrust> 推进器列表 = new List<IMyThrust>();
         private List<IMyGyro> 陀螺仪列表 = new List<IMyGyro>();
-
+        private List<IMyGravityGeneratorBase> 重力发生器列表 = new List<IMyGravityGeneratorBase>();
         // 引爆系统组件（可选）
         private List<IMySensorBlock> 传感器列表 = new List<IMySensorBlock>();
         private List<IMyWarhead> 激发雷管组 = new List<IMyWarhead>();
@@ -163,6 +163,12 @@ namespace IngameScript
             // 设置更新频率为每tick执行
             Runtime.UpdateFrequency = UpdateFrequency.Update1;
             已经初始化 = 初始化硬件();
+            if (!挂架系统可用)
+            {
+                导弹当前状态 = 导弹状态.搜索目标;
+                导弹上次状态 = 导弹状态.搜索目标;
+                激活导弹系统();
+            }
         }
 
         /// <summary>
@@ -419,6 +425,12 @@ namespace IngameScript
                     陀螺仪.Enabled = false;
                 }
 
+                // 关闭重力发生器
+                foreach (var 重力发生器 in 重力发生器列表)
+                {
+                    重力发生器.Enabled = false;
+                }
+
                 // 设置气罐为充气模式
                 if (氢气罐系统可用)
                 {
@@ -508,6 +520,17 @@ namespace IngameScript
             {
                 陀螺仪.Enabled = true;
                 陀螺仪.GyroOverride = false; // 先关闭覆盖，由控制逻辑接管
+            }
+
+            // 关闭重力发生器
+            foreach (var 重力发生器 in 重力发生器列表)
+            {
+                重力发生器.Enabled = true;
+            }
+
+            foreach (var 氢气罐 in 氢气罐列表)
+            {
+                氢气罐.Stockpile = false; // 关闭储存模式（自动）
             }
         }
 
@@ -620,6 +643,10 @@ namespace IngameScript
             // 获取陀螺仪
             陀螺仪列表.Clear();
             方块组.GetBlocksOfType(陀螺仪列表);
+
+            // 获取重力发生器
+            重力发生器列表.Clear();
+            方块组.GetBlocksOfType(重力发生器列表);
 
             // 初始化引爆系统（可选）
             初始化引爆系统(方块组);
@@ -1068,7 +1095,7 @@ namespace IngameScript
                 接近加速度 = 径向加速度大小 * 视线单位向量;
                 导航常数 = 参数们.计算导航常数(Math.Sqrt(世界最大加速度模长平方), 视线.Length());
             }
-            
+
             // ----- 步骤6: 合成飞行方向加速度 -----
             Vector3D 飞行方向加速度 = 比例导航加速度 + 接近加速度;
 
@@ -1084,7 +1111,7 @@ namespace IngameScript
                 // 2. 将重力分解到飞行方向和垂直飞行方向
                 double 重力在飞行方向投影 = Vector3D.Dot(重力加速度, 飞行方向单位向量);
                 Vector3D 重力飞行方向分量 = 重力在飞行方向投影 * 飞行方向单位向量;
-                Vector3D 重力垂直分量 = 重力加速度 - 重力飞行方向分量;
+                Vector3D 重力垂直分量 = (重力加速度 - 重力飞行方向分量) * 1.05; // 多加一点方向
 
                 // 3. 将垂直分量加入最终结果（飞行方向的重力分量不需要补偿，可以利用）
                 最终加速度命令 = 飞行方向加速度 - 重力垂直分量;
@@ -1391,11 +1418,11 @@ namespace IngameScript
         /// </summary>
         private void 旋转控制测试(string argument)
         {                // 根据参数更新目标到跟踪器中
-                if (!string.IsNullOrEmpty(argument))
-                {
-                    long 当前时间戳 = (long)Math.Round(更新计数器 * 参数们.时间常数 * 1000);
-                    Vector3D 测试目标位置 = Vector3D.Zero;
-                    bool 需要更新目标 = false;
+            if (!string.IsNullOrEmpty(argument))
+            {
+                long 当前时间戳 = (long)Math.Round(更新计数器 * 参数们.时间常数 * 1000);
+                Vector3D 测试目标位置 = Vector3D.Zero;
+                bool 需要更新目标 = false;
 
                 if (argument == "test")
                 {

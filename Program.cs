@@ -341,6 +341,11 @@ namespace IngameScript
                     break;
 
                 case 导弹状态.跟踪目标:
+
+                    目标跟踪器.maxTargetAcceleration = 0;
+                    // 备注：跟踪目标将目标最大加速度设置为0是AI块无法识别是否是同一目标的妥协。
+                    // 备注：这么用实际上是在用当前目标的加速度作为目标最大加速度，不完全符合补偿的计算理论
+
                     if (!有有效目标)
                     {
                         // 目标完全丢失，立即切换到预测制导
@@ -1016,6 +1021,9 @@ namespace IngameScript
                 比例导航加速度 = 导航常数 * 相对速度大小 * Vector3D.Cross(视线角速度, 视线单位向量);
             }
 
+            Vector3D 补偿项 = 比例导航加速度补偿项(目标信息.Value, 视线角速度.Normalized());
+            比例导航加速度 += 补偿项;
+
             // ----- 步骤6: 计算接近分量并执行重力补偿后处理 -----
             Vector3D 最终加速度命令;
             if (导弹到目标.Length() > 参数们.最小向量长度)
@@ -1031,10 +1039,38 @@ namespace IngameScript
             }
 
             // 输出诊断信息
+            Echo($"[比例导航] 目标最大过载: {目标跟踪器.maxTargetAcceleration:n1}");
+            Echo($"[比例导航] 补偿项：{补偿项.Length():n1} m/s²");
             Echo($"[比例导航] 目标距离: {距离:n1} m");
             Echo($"[比例导航] 当前加速度命令: {最终加速度命令.Length():n1} m/s²");
 
             return 最终加速度命令;
+        }
+
+        /// <summary>
+        /// 比例导航制导算法加速度补偿
+        /// </summary>
+        /// <param name="目标信息">目标信息</param>
+        /// <param name="视线角速度单位向量">视线角速度的单位向量</param>
+        /// <returns>制导加速度补偿命令(世界坐标系)</returns>
+        private Vector3D 比例导航加速度补偿项(SimpleTargetInfo 目标信息, Vector3D 视线角速度单位向量)
+        {
+            double 目标速度模长 = 目标信息.Velocity.Length(); // 目标速度模长
+            double 导弹速度模长 = 控制器.GetShipVelocities().LinearVelocity.Length(); // 导弹速度模长
+            // 获取目标最大加速度 (标量)
+            double 目标最大加速度 = 目标跟踪器.maxTargetAcceleration; // a_{T,max}
+
+            // 计算速度比 (标量)
+            double 速度比 = 目标速度模长 > 0.1 ? 导弹速度模长 / 目标速度模长 : 1.0; // ν
+
+            // 计算 C2 常数 (标量)
+            double C2 = 0;
+            if (速度比 > 0.9528) // 只有当导弹速度近似大于目标速度时才应用(101 / 106 ≈ 0.9528)
+            {
+                double 根号项 = Math.Sqrt(Math.Max(0, 1.0 - 1.0 / (速度比 * 速度比)));
+                C2 = 目标最大加速度 * 根号项;
+            }
+            return C2 * 视线角速度单位向量; // 返回补偿项            
         }
 
         /// <summary>
@@ -1060,7 +1096,7 @@ namespace IngameScript
             {
                 本地最大加速度向量.Z = -(轴向最大推力["ZN"] / 飞船质量);
             }
-            else if(推进器方向组["ZP"].Count > 0 && 本地比例导航加速度.Z > 0)
+            else if (推进器方向组["ZP"].Count > 0 && 本地比例导航加速度.Z > 0)
             {
                 本地最大加速度向量.Z = (轴向最大推力["ZP"] / 飞船质量);
             }

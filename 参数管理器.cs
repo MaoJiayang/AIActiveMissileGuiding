@@ -175,7 +175,7 @@ namespace IngameScript
         /// <summary>
         /// 战斗块更新目标间隔(正常状态)
         /// </summary>
-        public int 战斗块更新间隔正常 { get; set; } = 0;
+        public int 战斗块更新间隔正常 { get; set; } = 1;
 
         /// <summary>
         /// 战斗块更新目标间隔(跟踪状态)

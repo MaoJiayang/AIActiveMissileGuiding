@@ -121,6 +121,7 @@ namespace IngameScript
         public double circlingRadius = 0; // 目标当前环绕半径
         public double linearWeight, circularWeight;
         public double linearPositionError, circularPositionError, combinationError;
+        public double maxTargetAcceleration = 0; // 最大目标加速度（单位：m/s²）
         // 目标历史记录最大长度
         private readonly int _maxHistory;
         // 目标历史记录，最新数据放在链表头部
@@ -189,6 +190,7 @@ namespace IngameScript
         /// </summary>
         public void ClearHistory()
         {
+            maxTargetAcceleration = 0;
             _history.Clear();
         }
         /// <summary>
@@ -362,7 +364,8 @@ namespace IngameScript
                 predictedPos = currentPos + currentVel * dt_predict + 0.5 * acceleration * dt_predict * dt_predict;
                 predictedVel = currentVel + acceleration * dt_predict;
             }
-
+            // 更新最大加速度
+            maxTargetAcceleration = Math.Max(maxTargetAcceleration, acceleration.Length());
             return new SimpleTargetInfo(predictedPos, predictedVel, p0.TimeStamp + futureTimeMs);
         }
 

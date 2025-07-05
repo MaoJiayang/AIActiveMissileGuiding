@@ -17,11 +17,8 @@ using VRage.Game.ModAPI.Ingame;
 using VRage.Game.ModAPI.Ingame.Utilities;
 using VRage.Game.ObjectBuilders.Definitions;
 using VRageMath;
-// TODO: 待机-热发射逻辑加入重力发生器管理
-// TODO: 没有挂架时，待机解除的逻辑是？？
 // TODO：动态比例导引常数的距离逻辑中，将最大距离从2500改到发射点距离目标的距离。
 // TODO: 参数管理器版本控制，自动删除过期版本存储的配置数据并添加新的
-// TODO: 存在Z正推进器会导致Z正Z负一起发力
 namespace IngameScript
 {
     public partial class Program : MyGridProgram
@@ -576,7 +573,11 @@ namespace IngameScript
                 // 添加到目标跟踪器
                 目标跟踪器.UpdateTarget(目标位置, Vector3D.Zero, 当前时间戳);
                 // 获取最新目标信息进行制导
-                var 目标信息 = 目标跟踪器.PredictFutureTargetInfo(0);
+                SimpleTargetInfo 目标信息 = 目标跟踪器.PredictFutureTargetInfo(0);
+
+                // long 拦截时间 = Math.Min(计算最接近时间(目标信息), 300);
+                // 目标信息 = 目标跟踪器.PredictFutureTargetInfo(拦截时间);
+
                 Vector3D 制导命令 = 比例导航制导(控制器, 目标信息);
                 应用制导命令(制导命令, 控制器);
             }
@@ -592,10 +593,12 @@ namespace IngameScript
             {
                 // 使用预测位置进行制导
                 long 预测时间毫秒 = (long)Math.Round((更新计数器 - 上次目标更新时间) * 参数们.时间常数 * 1000);
-                var 预测目标 = 目标跟踪器.PredictFutureTargetInfo(预测时间毫秒);
+                SimpleTargetInfo 预测目标 = 目标跟踪器.PredictFutureTargetInfo(预测时间毫秒);
 
-                SimpleTargetInfo 目标信息 = new SimpleTargetInfo(预测目标.Position, 预测目标.Velocity, 预测目标.TimeStamp);
-                Vector3D 制导命令 = 比例导航制导(控制器, 目标信息);
+                // long 拦截时间 = Math.Min(计算最接近时间(预测目标), 300);
+                // 预测目标 = 目标跟踪器.PredictFutureTargetInfo(拦截时间 + 预测时间毫秒);
+
+                Vector3D 制导命令 = 比例导航制导(控制器, 预测目标);
                 应用制导命令(制导命令, 控制器);
             }
         }
@@ -994,7 +997,7 @@ namespace IngameScript
             if (导弹速度长度 < 参数们.最小向量长度)
             {
                 // 当导弹速度过小时，使用默认方向
-                导弹速度单位向量 = new Vector3D(1, 1, 1).Normalized();
+                导弹速度单位向量 = 视线单位向量.Normalized();
             }
             else
             {
@@ -1053,7 +1056,18 @@ namespace IngameScript
             Vector3D 本地最大加速度向量 = Vector3D.Zero;
 
             // 负方向，使用ZN推进器，加上负号
-            本地最大加速度向量.Z = -(轴向最大推力["ZN"] / 飞船质量);
+            if (本地比例导航加速度.Z < 0)
+            {
+                本地最大加速度向量.Z = -(轴向最大推力["ZN"] / 飞船质量);
+            }
+            else if(推进器方向组["ZP"].Count > 0 && 本地比例导航加速度.Z > 0)
+            {
+                本地最大加速度向量.Z = (轴向最大推力["ZP"] / 飞船质量);
+            }
+            else
+            {
+                本地最大加速度向量.Z = -(轴向最大推力["ZN"] / 飞船质量);
+            }
             if (本地比例导航加速度.X < 0)
             {
                 // 负X方向，使用XN推进器，加上负号
@@ -1135,48 +1149,6 @@ namespace IngameScript
         }
 
         /// <summary>
-        /// 最小加速度平方型最优制导
-        /// </summary>
-        /// <param name="控制器">飞船控制器</param>
-        /// <param name="目标信息">目标信息</param>
-        /// <returns>所需的世界坐标系加速度矢量</returns>
-        private Vector3D 最优制导(IMyShipController 控制器, SimpleTargetInfo? 目标信息)
-        {
-            if (控制器 == null || !目标信息.HasValue)
-                return Vector3D.Zero;
-
-            // 导弹状态
-            Vector3D mPos = 控制器.GetPosition();
-            Vector3D mVel = 控制器.GetShipVelocities().LinearVelocity;
-
-            // 目标状态
-            var tgt = 目标信息.Value;
-            Vector3D tPos = tgt.Position;
-            Vector3D tVel = tgt.Velocity;
-
-            // 相对位置与速度
-            Vector3D r = tPos - mPos;
-            double dist = r.Length();
-            if (dist < 参数们.最小向量长度)
-                return Vector3D.Zero;
-
-            Vector3D rHat = r / dist;
-            Vector3D vRel = tVel - mVel;
-
-            // 估算剩余飞行时间：取视线方向上的速度分量
-            double closingSpeed = Math.Max(Vector3D.Dot(rHat, mVel), 参数们.最小向量长度);
-            double T = dist / closingSpeed;
-
-            // 最小飞行时间保护
-            T = Math.Max(T, 0.1);
-
-            // 最优加速度（最小 ∫a² dt 解的初值）
-            // u0 = 2*(3 r + 2 vRel * T) / T²
-            Vector3D aOpt = (6.0 * r + 4.0 * vRel * T) / (T * T);
-            aOpt = 计算接近加速度并重力补偿(r, aOpt, 控制器);
-            return aOpt;
-        }
-        /// <summary>
         /// 计算目标转向角度
         /// </summary>
         private Vector3D 计算目标角度(Vector3D 加速度命令, IMyShipController 控制器)
@@ -1203,6 +1175,37 @@ namespace IngameScript
             Vector3D 目标角度PYR = 旋转轴 * 角度误差;
             Echo($"[陀螺仪] 角度误差: {角度误差 * 180.0 / Math.PI:n1} 度");
             return 目标角度PYR;
+        }
+        
+        /// <summary>
+        /// 计算最接近时间和距离，匀速假设
+        /// </summary>
+        /// <param name="目标信息">目标信息</param>
+        /// <returns>最接近时间（毫秒）</returns>
+        private long 计算最接近时间(SimpleTargetInfo 目标信息)
+        {
+            // 相对位置和速度
+            Vector3D 相对位置 = 目标信息.Position - 控制器.GetPosition();
+            Vector3D 相对速度 = 目标信息.Velocity - 控制器.GetShipVelocities().LinearVelocity;
+
+            // 如果相对速度为零，则不会更接近
+            double 相对速度平方 = 相对速度.LengthSquared();
+            if (相对速度平方 < 参数们.最小向量长度)
+            {
+                return 0; // 立即就是最接近状态
+            }
+
+            // 计算最接近时间：t = -(r·v) / |v|²
+            long 最接近时间 = (long)Math.Round(-Vector3D.Dot(相对位置, 相对速度) / 相对速度平方 * 1000); // 转换为毫秒
+            Echo($"[预测] 预计拦截: {最接近时间} 毫秒");
+            // 如果时间为负，说明最接近点在过去
+            if (最接近时间 < 0)
+            {
+                最接近时间 = 0;
+                return 最接近时间;
+            }
+
+            return 最接近时间;
         }
 
         #endregion
@@ -1364,7 +1367,17 @@ namespace IngameScript
 
             // 确定应该使用哪个方向的推进器组
             string 激活组名 = 本地加速度 >= 0 ? 正方向组 : 负方向组;
-
+            string 关闭组名 = 本地加速度 >= 0 ? 负方向组 : 正方向组;
+            
+            // 首先关闭反方向的推进器组
+            List<IMyThrust> 关闭组;
+            if (推进器方向组.TryGetValue(关闭组名, out 关闭组))
+            {
+                foreach (var 推进器 in 关闭组)
+                {
+                    推进器.ThrustOverride = 0f;
+                }
+            }            
             // 获取对应方向的推进器组（已排序）
             List<IMyThrust> 推进器组;
             if (!推进器方向组.TryGetValue(激活组名, out 推进器组) || 推进器组.Count == 0)

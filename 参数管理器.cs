@@ -33,7 +33,7 @@ namespace IngameScript
         /// <summary>
         /// 角度误差下限，小于此值视为对准
         /// </summary>
-        public double 角度误差最小值 { get; set; } = Math.PI / 180.0 * 0.25;
+        public double 角度误差最小值 { get; set; } = Math.PI / 180.0 * 0.2;
 
         /// <summary>
         /// 导航常数初始值
@@ -78,7 +78,7 @@ namespace IngameScript
         #region 状态切换时间参数
 
         /// <summary>
-        /// 陀螺仪更新间隔(ticks)
+        /// 陀螺仪(现在是动力系统）更新间隔(ticks)
         /// </summary>
         public int 陀螺仪更新间隔 { get; set; } = 5;
 
@@ -125,34 +125,14 @@ namespace IngameScript
         }
 
         /// <summary>
-        /// 偏航外环PID参数
+        /// 外环PID参数
         /// </summary>
-        public PID参数 偏航外环参数 { get; set; } = new PID参数(4, 0, 0);
+        public PID参数 外环参数 { get; set; } = new PID参数(5, 0, 0);
 
         /// <summary>
-        /// 俯仰外环PID参数
+        /// 内环PID参数
         /// </summary>
-        public PID参数 俯仰外环参数 { get; set; } = new PID参数(4, 0, 0);
-
-        /// <summary>
-        /// 横滚外环PID参数
-        /// </summary>
-        public PID参数 横滚外环参数 { get; set; } = new PID参数(4, 0, 0);
-
-        /// <summary>
-        /// 偏航内环PID参数
-        /// </summary>
-        public PID参数 偏航内环参数 { get; set; } = new PID参数(12, 0.005, 0.2);
-
-        /// <summary>
-        /// 俯仰内环PID参数
-        /// </summary>
-        public PID参数 俯仰内环参数 { get; set; } = new PID参数(12, 0.005, 0.2);
-
-        /// <summary>
-        /// 横滚内环PID参数
-        /// </summary>
-        public PID参数 横滚内环参数 { get; set; } = new PID参数(12, 0.005, 0.2);
+        public PID参数 内环参数 { get; set; } = new PID参数(21, 0.01, 0.9);
 
         #endregion
 
@@ -193,12 +173,14 @@ namespace IngameScript
 
         #endregion
 
-        #region 推进器控制参数
+        #region 飞控硬件参数
 
         /// <summary>
-        /// 推进器方向容差
+        /// 推进器和陀螺仪的方向容差
         /// </summary>
-        public double 推进器方向容差 { get; set; } = 0.8;
+        public double 推进器方向容差 { get; set; } = 0.9;
+
+        public double 常驻滚转转速 { get; set; } = 0.0; // 常驻滚转转速(弧度/秒)
 
         #endregion
 
@@ -293,7 +275,20 @@ namespace IngameScript
                 尝试设置参数(键, 值);
             }
         }
-
+        // 并在类内添加解析方法：
+        private PID参数 解析PID参数(string 参数值)
+        {
+            // 支持格式: "P,I,D"
+            var arr = 参数值.Split(',');
+            if (arr.Length == 3)
+            {
+                double p = double.Parse(arr[0]);
+                double i = double.Parse(arr[1]);
+                double d = double.Parse(arr[2]);
+                return new PID参数(p, i, d);
+            }
+            return new PID参数(0, 0, 0);
+        }
         /// <summary>
         /// 尝试设置指定的参数
         /// </summary>
@@ -364,14 +359,20 @@ namespace IngameScript
                         }
                         catch { }
                         break;
-                    case "推进器方向容差":
-                        推进器方向容差 = double.Parse(参数值);
-                        break;
                     case "性能统计重置间隔":
                         性能统计重置间隔 = int.Parse(参数值);
                         break;
                     case "组名前缀":
                         组名前缀 = 参数值;
+                        break;
+                    case "外环PID3":
+                        外环参数 = 解析PID参数(参数值);
+                        break;
+                    case "内环PID3":
+                        内环参数 = 解析PID参数(参数值);
+                        break;
+                    case "常驻滚转转速":
+                        常驻滚转转速 = double.Parse(参数值);
                         break;
                 }
             }
@@ -426,15 +427,20 @@ namespace IngameScript
             配置.AppendLine($"目标优先级={目标优先级}");
             配置.AppendLine("// 目标优先级可选项:Closest,Largest,Smallest");
             配置.AppendLine();
-            配置.AppendLine("// 推进器控制参数");
-            配置.AppendLine($"推进器方向容差={推进器方向容差}");
             配置.AppendLine();
             配置.AppendLine("// 性能统计参数");
             配置.AppendLine($"性能统计重置间隔={性能统计重置间隔}");
-            配置.AppendLine();
-            配置.AppendLine("// 组名配置");
+            配置.AppendLine();   
             配置.AppendLine($"组名前缀={组名前缀}");
-
+            配置.AppendLine();
+            配置.AppendLine("// 三轴一致外环PID参数");
+            配置.AppendLine($"外环PID3={外环参数.P系数},{外环参数.I系数},{外环参数.D系数}");
+            配置.AppendLine("// 三轴一致内环PID参数");
+            配置.AppendLine($"内环PID3={内环参数.P系数},{内环参数.I系数},{内环参数.D系数}");
+            配置.AppendLine();
+            配置.AppendLine("// 飞控硬件参数");
+            配置.AppendLine($"常驻滚转转速={常驻滚转转速}"); // 常驻滚转转速(弧度/秒)
+            配置.AppendLine("// 常驻滚转转速可能会影响导弹的方向稳定性");
             return 配置.ToString();
         }
 

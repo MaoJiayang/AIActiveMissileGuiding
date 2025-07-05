@@ -176,9 +176,9 @@ namespace IngameScript
         #region 推进器控制参数
 
         /// <summary>
-        /// 推进器方向容差
+        /// 推进器和陀螺仪的方向容差
         /// </summary>
-        public double 推进器方向容差 { get; set; } = 0.8;
+        public double 推进器方向容差 { get; set; } = 0.9;
 
         #endregion
 
@@ -344,9 +344,6 @@ namespace IngameScript
                         }
                         catch { }
                         break;
-                    case "推进器方向容差":
-                        推进器方向容差 = double.Parse(参数值);
-                        break;
                     case "性能统计重置间隔":
                         性能统计重置间隔 = int.Parse(参数值);
                         break;
@@ -406,8 +403,6 @@ namespace IngameScript
             配置.AppendLine($"目标优先级={目标优先级}");
             配置.AppendLine("// 目标优先级可选项:Closest,Largest,Smallest");
             配置.AppendLine();
-            配置.AppendLine("// 推进器控制参数");
-            配置.AppendLine($"推进器方向容差={推进器方向容差}");
             配置.AppendLine();
             配置.AppendLine("// 性能统计参数");
             配置.AppendLine($"性能统计重置间隔={性能统计重置间隔}");

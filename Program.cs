@@ -60,6 +60,7 @@ namespace IngameScript
         private int 热发射开始帧数 = 0;
         private int 更新计数器 = 0;
         private bool 等待二阶段引爆 = false;
+        private double 陀螺仪最高转速 = 2 * Math.PI;
 
         #endregion
 
@@ -106,6 +107,7 @@ namespace IngameScript
         {
             {"XP", 0}, {"XN", 0}, {"YP", 0}, {"YN", 0}, {"ZP", 0}, {"ZN", 0}
         };
+        private Dictionary<IMyGyro, Vector3D> 陀螺仪各轴点积 = new Dictionary<IMyGyro, Vector3D>();
         private bool 推进器已分类 = false;
 
         #endregion
@@ -155,6 +157,9 @@ namespace IngameScript
             // 初始化导航常数
             导航常数 = 参数们.导航常数初始值;
 
+            // 陀螺仪的最大命令值
+            陀螺仪最高转速 = Me.CubeGrid.GridSizeEnum == MyCubeSize.Large ? Math.PI : 2 * Math.PI;
+        
             // 设置更新频率为每tick执行
             Runtime.UpdateFrequency = UpdateFrequency.Update1;
             已经初始化 = 初始化硬件();
@@ -1286,14 +1291,92 @@ namespace IngameScript
             foreach (var 陀螺仪 in 陀螺仪列表)
             {
                 // 使用陀螺仪世界矩阵将世界坐标的角速度转换为陀螺仪局部坐标系
-                Vector3D 陀螺仪本地命令 = Vector3D.TransformNormal(最终旋转命令PYR, MatrixD.Transpose(陀螺仪.WorldMatrix));
-
-                // 注意陀螺仪的轴向定义与游戏世界坐标系的差异，需要取负
-                陀螺仪.Pitch = -(float)陀螺仪本地命令.X;
-                陀螺仪.Yaw = -(float)陀螺仪本地命令.Y;
-                陀螺仪.Roll = -(float)陀螺仪本地命令.Z;
+                // Vector3D 陀螺仪本地命令 = Vector3D.TransformNormal(最终旋转命令PYR, MatrixD.Transpose(陀螺仪.WorldMatrix));
+                Vector3D 陀螺仪本地命令 = 转换至本地并忽略滚转(最终旋转命令PYR, 陀螺仪, 控制器);
+                // // 注意陀螺仪的轴向定义与游戏世界坐标系的差异，需要取负
+                if (需要更新陀螺仪命令(陀螺仪.Pitch, -(float)陀螺仪本地命令.X)) 陀螺仪.Pitch = -(float)陀螺仪本地命令.X;
+                if(需要更新陀螺仪命令(陀螺仪.Yaw, -(float)陀螺仪本地命令.Y)) 陀螺仪.Yaw = -(float)陀螺仪本地命令.Y;
+                if(需要更新陀螺仪命令(陀螺仪.Roll, -(float)陀螺仪本地命令.Z)) 陀螺仪.Roll = -(float)陀螺仪本地命令.Z;
                 陀螺仪.GyroOverride = true;
+
             }
+        }
+        
+        /// <summary>
+        /// 将世界坐标角速度转换为陀螺仪本地坐标，并自动忽略滚转轴
+        /// </summary>
+        /// <param name="世界角速度">世界坐标系下的角速度命令</param>
+        /// <param name="陀螺仪">陀螺仪对象</param>
+        /// <param name="控制器">控制器对象</param>
+        /// <returns>处理后的陀螺仪本地坐标角速度</returns>
+        private Vector3D 转换至本地并忽略滚转(Vector3D 世界角速度, IMyGyro 陀螺仪, IMyShipController 控制器)
+        {
+            // 首先进行标准的坐标转换
+            Vector3D 陀螺仪本地命令 = Vector3D.TransformNormal(世界角速度, MatrixD.Transpose(陀螺仪.WorldMatrix));
+
+            // 获取导弹Z轴方向（控制器的前进方向）
+            Vector3D 导弹Z轴方向 = 控制器.WorldMatrix.Forward;
+
+            Vector3D 该陀螺仪点积;
+            if (!陀螺仪各轴点积.TryGetValue(陀螺仪, out 该陀螺仪点积))
+            {
+                // 获取陀螺仪的三个本地轴在世界坐标系中的方向
+                Vector3D 陀螺仪X轴世界方向 = 陀螺仪.WorldMatrix.Right;    // 对应本地X轴（Pitch）
+                Vector3D 陀螺仪Y轴世界方向 = 陀螺仪.WorldMatrix.Up;       // 对应本地Y轴（Yaw）
+                Vector3D 陀螺仪Z轴世界方向 = 陀螺仪.WorldMatrix.Forward;   // 对应本地Z轴（Roll）
+                该陀螺仪点积 = new Vector3D(
+                    Vector3D.Dot(陀螺仪X轴世界方向, 导弹Z轴方向),
+                    Vector3D.Dot(陀螺仪Y轴世界方向, 导弹Z轴方向),
+                    Vector3D.Dot(陀螺仪Z轴世界方向, 导弹Z轴方向)
+                );
+                陀螺仪各轴点积[陀螺仪] = 该陀螺仪点积;
+            }
+
+            // 检查各轴与导弹Z轴的点积，判断是否同向
+            double X轴点积 = Math.Abs(该陀螺仪点积.X);
+            double Y轴点积 = Math.Abs(该陀螺仪点积.Y);
+            double Z轴点积 = Math.Abs(该陀螺仪点积.Z);
+
+            // 找出最接近同向的轴并将其命令置零
+            if (X轴点积 > 参数们.推进器方向容差)
+            {
+                陀螺仪本地命令.X = 0; // 忽略Pitch轴
+            }
+            else if (Y轴点积 > 参数们.推进器方向容差)
+            {
+                陀螺仪本地命令.Y = 0; // 忽略Yaw轴
+            }
+            else if (Z轴点积 > 参数们.推进器方向容差)
+            {
+                陀螺仪本地命令.Z = 0; // 忽略Roll轴
+            }
+
+            return 陀螺仪本地命令;
+        }    
+
+        /// <summary>
+        /// 判断是否需要更新陀螺仪命令
+        /// 如果当前值已经接近最大值，且新命令在同方向且更大，则不更新
+        /// 如果差异很小，也不更新
+        /// </summary>
+        private bool 需要更新陀螺仪命令(double 当前值, double 新值, double 容差 = 1e-3)
+        {
+
+            if (Math.Abs(当前值) > 陀螺仪最高转速 - 容差)
+            {
+                // 当前值接近最大值
+                if (Math.Sign(当前值) == Math.Sign(新值) && Math.Abs(新值) >= Math.Abs(当前值))
+                {
+                    return false; // 不更新
+                }
+            }
+
+            // 如果差异很小，也不更新
+            if (Math.Abs(当前值 - 新值) < 容差)
+            {
+                return false;
+            }
+            return true;
         }
 
         /// <summary>

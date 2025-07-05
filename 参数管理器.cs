@@ -125,34 +125,14 @@ namespace IngameScript
         }
 
         /// <summary>
-        /// 偏航外环PID参数
+        /// 外环PID参数
         /// </summary>
-        public PID参数 偏航外环参数 { get; set; } = new PID参数(4, 0, 0);
+        public PID参数 外环参数 { get; set; } = new PID参数(4, 0, 0);
 
         /// <summary>
-        /// 俯仰外环PID参数
+        /// 内环PID参数
         /// </summary>
-        public PID参数 俯仰外环参数 { get; set; } = new PID参数(4, 0, 0);
-
-        /// <summary>
-        /// 横滚外环PID参数
-        /// </summary>
-        public PID参数 横滚外环参数 { get; set; } = new PID参数(4, 0, 0);
-
-        /// <summary>
-        /// 偏航内环PID参数0.005
-        /// </summary>
-        public PID参数 偏航内环参数 { get; set; } = new PID参数(21, 0.008, 0.9);
-
-        /// <summary>
-        /// 俯仰内环PID参数
-        /// </summary>
-        public PID参数 俯仰内环参数 { get; set; } = new PID参数(21, 0.008, 0.9);
-
-        /// <summary>
-        /// 横滚内环PID参数
-        /// </summary>
-        public PID参数 横滚内环参数 { get; set; } = new PID参数(21, 0.008, 0.9);
+        public PID参数 内环参数 { get; set; } = new PID参数(21, 0.008, 0.9);
 
         #endregion
 

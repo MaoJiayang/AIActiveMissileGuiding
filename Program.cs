@@ -113,14 +113,10 @@ namespace IngameScript
         #region PID控制系统
 
         // PID控制器 - 外环(角度误差->期望角速度)
-        private PID 偏航外环;
-        private PID 俯仰外环;
-        private PID 横滚外环;
+        private PID3 外环PID控制器PYR = null;
 
         // PID控制器 - 内环(角速度误差->陀螺仪设定)
-        private PID 偏航内环PD;
-        private PID 俯仰内环PD;
-        private PID 横滚内环PD;
+        private PID3 内环PID控制器PYR = null;
 
         #endregion
 
@@ -178,14 +174,11 @@ namespace IngameScript
             double pid时间常数 = 参数们.获取PID时间常数();
 
             // 初始化外环PID控制器
-            偏航外环 = new PID(参数们.偏航外环参数.P系数, 参数们.偏航外环参数.I系数, 参数们.偏航外环参数.D系数, pid时间常数);
-            俯仰外环 = new PID(参数们.俯仰外环参数.P系数, 参数们.俯仰外环参数.I系数, 参数们.俯仰外环参数.D系数, pid时间常数);
-            横滚外环 = new PID(参数们.横滚外环参数.P系数, 参数们.横滚外环参数.I系数, 参数们.横滚外环参数.D系数, pid时间常数);
+            外环PID控制器PYR = new PID3(参数们.外环参数.P系数, 参数们.外环参数.I系数, 参数们.外环参数.D系数, pid时间常数);
 
             // 初始化内环PID控制器
-            偏航内环PD = new PID(参数们.偏航内环参数.P系数, 参数们.偏航内环参数.I系数, 参数们.偏航内环参数.D系数, pid时间常数);
-            俯仰内环PD = new PID(参数们.俯仰内环参数.P系数, 参数们.俯仰内环参数.I系数, 参数们.俯仰内环参数.D系数, pid时间常数);
-            横滚内环PD = new PID(参数们.横滚内环参数.P系数, 参数们.横滚内环参数.I系数, 参数们.横滚内环参数.D系数, pid时间常数);
+            内环PID控制器PYR = new PID3(参数们.内环参数.P系数, 参数们.内环参数.I系数, 参数们.内环参数.D系数, pid时间常数);
+
         }
 
         public void Main(string argument, UpdateType updateSource)
@@ -1266,12 +1259,8 @@ namespace IngameScript
                     陀螺仪.GyroOverride = true; // 保持覆盖状态但输出为零
                 }
                 // 重置所有PID控制器
-                偏航外环.Reset();
-                俯仰外环.Reset();
-                横滚外环.Reset();
-                偏航内环PD.Reset();
-                俯仰内环PD.Reset();
-                横滚内环PD.Reset();
+                外环PID控制器PYR.Reset();
+                内环PID控制器PYR.Reset();
                 角度误差在容忍范围内 = true;
                 return;
             }
@@ -1281,32 +1270,23 @@ namespace IngameScript
                 return;
             // ----------------- 外环：角度误差 → 期望角速度 (世界坐标系) -----------------
             // 使用PD控制器将角度误差转换为期望角速度
-            double 期望俯仰速率 = 俯仰外环.GetOutput(目标角度PYR.X);
-            double 期望偏航速率 = 偏航外环.GetOutput(目标角度PYR.Y);
-            double 期望横滚速率 = 横滚外环.GetOutput(目标角度PYR.Z);
+            Vector3D 期望角速度PYR = 外环PID控制器PYR.GetOutput(目标角度PYR);
 
             // ----------------- 内环：角速度误差 → 最终指令 (世界坐标系) -----------------
             // 获取飞船当前角速度（单位：弧度/秒），已在世界坐标系下
             Vector3D 当前角速度 = 控制器.GetShipVelocities().AngularVelocity;
 
             // 计算各轴角速度误差
-            double 俯仰速率误差 = 期望俯仰速率 - 当前角速度.X;
-            double 偏航速率误差 = 期望偏航速率 - 当前角速度.Y;
-            double 横滚速率误差 = 期望横滚速率 - 当前角速度.Z;
+            Vector3D 速率误差PYR = 期望角速度PYR - 当前角速度;
 
             // 内环PD：将角速度误差转换为最终下发指令
-            double 最终俯仰命令 = 俯仰内环PD.GetOutput(俯仰速率误差);
-            double 最终偏航命令 = 偏航内环PD.GetOutput(偏航速率误差);
-            double 最终横滚命令 = 横滚内环PD.GetOutput(横滚速率误差);
-
-            // 构造最终期望角速度（单位：弧度/秒），仍处于世界坐标系
-            Vector3D 最终角速度命令 = new Vector3D(最终俯仰命令, 最终偏航命令, 最终横滚命令);
+            Vector3D 最终旋转命令PYR = 内环PID控制器PYR.GetOutput(速率误差PYR);
 
             // ----------------- 应用到各陀螺仪 -----------------
             foreach (var 陀螺仪 in 陀螺仪列表)
             {
                 // 使用陀螺仪世界矩阵将世界坐标的角速度转换为陀螺仪局部坐标系
-                Vector3D 陀螺仪本地命令 = Vector3D.TransformNormal(最终角速度命令, MatrixD.Transpose(陀螺仪.WorldMatrix));
+                Vector3D 陀螺仪本地命令 = Vector3D.TransformNormal(最终旋转命令PYR, MatrixD.Transpose(陀螺仪.WorldMatrix));
 
                 // 注意陀螺仪的轴向定义与游戏世界坐标系的差异，需要取负
                 陀螺仪.Pitch = -(float)陀螺仪本地命令.X;

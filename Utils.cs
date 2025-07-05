@@ -1,4 +1,5 @@
 using System;
+using VRageMath;
 namespace IngameScript
 {
     public class PID
@@ -97,6 +98,134 @@ namespace IngameScript
         }
     }
     
+    /// <summary>
+    /// 三轴PID控制器，管理X、Y、Z三个独立的PID控制器
+    /// </summary>
+    public class PID3
+    {
+        private readonly PID _pidX;
+        private readonly PID _pidY;
+        private readonly PID _pidZ;
+        public PID3(double kp, double ki, double kd, double dt)
+        {
+            _pidX = new PID(kp, ki, kd, dt);
+            _pidY = new PID(kp, ki, kd, dt);
+            _pidZ = new PID(kp, ki, kd, dt);
+        }
+
+        /// <summary>
+        /// 使用不同参数初始化三个轴的PID控制器
+        /// </summary>
+        public PID3(double kpX, double kiX, double kdX,
+                    double kpY, double kiY, double kdY,
+                    double kpZ, double kiZ, double kdZ,
+                    double dt)
+        {
+            _pidX = new PID(kpX, kiX, kdX, dt);
+            _pidY = new PID(kpY, kiY, kdY, dt);
+            _pidZ = new PID(kpZ, kiZ, kdZ, dt);
+        }
+
+        /// <summary>
+        /// 设置所有轴的输出限制
+        /// </summary>
+        public void SetOutputLimits(double min, double max)
+        {
+            _pidX.SetOutputLimits(min, max);
+            _pidY.SetOutputLimits(min, max);
+            _pidZ.SetOutputLimits(min, max);
+        }
+
+        /// <summary>
+        /// 分别设置各轴的输出限制
+        /// </summary>
+        public void SetOutputLimits(Vector3D min, Vector3D max)
+        {
+            _pidX.SetOutputLimits(min.X, max.X);
+            _pidY.SetOutputLimits(min.Y, max.Y);
+            _pidZ.SetOutputLimits(min.Z, max.Z);
+        }
+
+        /// <summary>
+        /// 设置所有轴的积分限制
+        /// </summary>
+        public void SetIntegralLimits(double min, double max)
+        {
+            _pidX.SetIntegralLimits(min, max);
+            _pidY.SetIntegralLimits(min, max);
+            _pidZ.SetIntegralLimits(min, max);
+        }
+
+        /// <summary>
+        /// 分别设置各轴的积分限制
+        /// </summary>
+        public void SetIntegralLimits(Vector3D min, Vector3D max)
+        {
+            _pidX.SetIntegralLimits(min.X, max.X);
+            _pidY.SetIntegralLimits(min.Y, max.Y);
+            _pidZ.SetIntegralLimits(min.Z, max.Z);
+        }
+
+        /// <summary>
+        /// 设置所有轴的回馈系数
+        /// </summary>
+        public void SetBackCalculationFactor(double factor)
+        {
+            _pidX.SetBackCalculationFactor(factor);
+            _pidY.SetBackCalculationFactor(factor);
+            _pidZ.SetBackCalculationFactor(factor);
+        }
+
+        /// <summary>
+        /// 分别设置各轴的回馈系数
+        /// </summary>
+        public void SetBackCalculationFactor(Vector3D factors)
+        {
+            _pidX.SetBackCalculationFactor(factors.X);
+            _pidY.SetBackCalculationFactor(factors.Y);
+            _pidZ.SetBackCalculationFactor(factors.Z);
+        }
+
+        /// <summary>
+        /// 获取Vector3D形式的PID输出
+        /// </summary>
+        /// <param name="error">误差向量</param>
+        /// <returns>控制输出向量</returns>
+        public Vector3D GetOutput(Vector3D error)
+        {
+            double outputX = _pidX.GetOutput(error.X);
+            double outputY = _pidY.GetOutput(error.Y);
+            double outputZ = _pidZ.GetOutput(error.Z);
+
+            return new Vector3D(outputX, outputY, outputZ);
+        }
+
+        /// <summary>
+        /// 重置所有PID控制器状态
+        /// </summary>
+        public void Reset()
+        {
+            _pidX.Reset();
+            _pidY.Reset();
+            _pidZ.Reset();
+        }
+
+        /// <summary>
+        /// 获取X轴PID控制器的引用
+        /// </summary>
+        public PID PidX => _pidX;
+
+        /// <summary>
+        /// 获取Y轴PID控制器的引用
+        /// </summary>
+        public PID PidY => _pidY;
+
+        /// <summary>
+        /// 获取Z轴PID控制器的引用
+        /// </summary>
+        public PID PidZ => _pidZ;
+    } 
+       
     public class CircularQueue<T>
     {
         private readonly T[] _items;
@@ -124,7 +253,7 @@ namespace IngameScript
 
             if (_size < _capacity)
                 _size++;
-            
+
             HasError = false; // 重置错误状态
         }
 
@@ -199,7 +328,7 @@ namespace IngameScript
                 HasError = true;
                 return false;
             }
-            
+
             item = _items[_head];
             return true;
         }
@@ -232,7 +361,7 @@ namespace IngameScript
                 HasError = true;
                 return false;
             }
-            
+
             int lastIndex = (_head - (_size - 1) + _capacity) % _capacity;
             item = _items[lastIndex];
             return true;

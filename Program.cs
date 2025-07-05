@@ -1258,10 +1258,9 @@ namespace IngameScript
                 // 角度误差很小，停止陀螺仪以减少抖动
                 foreach (var 陀螺仪 in 陀螺仪列表)
                 {
-                    陀螺仪.Pitch = 0f;
-                    陀螺仪.Yaw = 0f;
-                    陀螺仪.Roll = 0f;
-                    陀螺仪.GyroOverride = true; // 保持覆盖状态但输出为零
+                    Vector3D 陀螺仪本地命令 = Vector3D.Zero;
+                    陀螺仪本地命令 = 加入本地滚转(陀螺仪, 陀螺仪本地命令, 参数们.常驻滚转转速);
+                    施加本地转速指令(陀螺仪, 陀螺仪本地命令);
                 }
                 // 重置所有PID控制器
                 外环PID控制器PYR.Reset();
@@ -1291,29 +1290,63 @@ namespace IngameScript
             foreach (var 陀螺仪 in 陀螺仪列表)
             {
                 // 使用陀螺仪世界矩阵将世界坐标的角速度转换为陀螺仪局部坐标系
-                // Vector3D 陀螺仪本地命令 = Vector3D.TransformNormal(最终旋转命令PYR, MatrixD.Transpose(陀螺仪.WorldMatrix));
-                Vector3D 陀螺仪本地命令 = 转换至本地并忽略滚转(最终旋转命令PYR, 陀螺仪, 控制器);
-                // // 注意陀螺仪的轴向定义与游戏世界坐标系的差异，需要取负
-                if (需要更新陀螺仪命令(陀螺仪.Pitch, -(float)陀螺仪本地命令.X)) 陀螺仪.Pitch = -(float)陀螺仪本地命令.X;
-                if(需要更新陀螺仪命令(陀螺仪.Yaw, -(float)陀螺仪本地命令.Y)) 陀螺仪.Yaw = -(float)陀螺仪本地命令.Y;
-                if(需要更新陀螺仪命令(陀螺仪.Roll, -(float)陀螺仪本地命令.Z)) 陀螺仪.Roll = -(float)陀螺仪本地命令.Z;
-                陀螺仪.GyroOverride = true;
-
+                Vector3D 陀螺仪本地转速命令 = Vector3D.TransformNormal(最终旋转命令PYR, MatrixD.Transpose(陀螺仪.WorldMatrix));
+                陀螺仪本地转速命令 = 加入本地滚转(陀螺仪, 陀螺仪本地转速命令, 参数们.常驻滚转转速);
+                施加本地转速指令(陀螺仪, 陀螺仪本地转速命令);
             }
         }
         
         /// <summary>
-        /// 将世界坐标角速度转换为陀螺仪本地坐标，并自动忽略滚转轴
+        /// 将本地指令实际应用到陀螺仪，带懒惰更新
+        /// 仅在指令有变化时更新陀螺仪的转速
         /// </summary>
-        /// <param name="世界角速度">世界坐标系下的角速度命令</param>
-        /// <param name="陀螺仪">陀螺仪对象</param>
-        /// <param name="控制器">控制器对象</param>
-        /// <returns>处理后的陀螺仪本地坐标角速度</returns>
-        private Vector3D 转换至本地并忽略滚转(Vector3D 世界角速度, IMyGyro 陀螺仪, IMyShipController 控制器)
+        private void 施加本地转速指令(IMyGyro 陀螺仪, Vector3D 本地指令)
         {
-            // 首先进行标准的坐标转换
-            Vector3D 陀螺仪本地命令 = Vector3D.TransformNormal(世界角速度, MatrixD.Transpose(陀螺仪.WorldMatrix));
+            陀螺仪.GyroOverride = true;
+            // 注意陀螺仪的轴向定义与游戏世界坐标系的差异，需要取负
+            if (陀螺仪命令需更新(陀螺仪.Pitch, -(float)本地指令.X)) 陀螺仪.Pitch = -(float)本地指令.X;
+            if (陀螺仪命令需更新(陀螺仪.Yaw, -(float)本地指令.Y)) 陀螺仪.Yaw = -(float)本地指令.Y;
+            if (陀螺仪命令需更新(陀螺仪.Roll, -(float)本地指令.Z)) 陀螺仪.Roll = -(float)本地指令.Z;
+        }    
+        
+        /// <summary>
+        /// 找出滚转轴，并返回陀螺仪本地命令加上正确的滚转向量
+        /// </summary>
+        /// <param name="陀螺仪">陀螺仪块</param>
+        /// <param name="陀螺仪本地命令">陀螺仪的本地命令向量</param>
+        /// <param name="弧度每秒">滚转速度（弧度/秒）包含方向</param>
+        /// <returns>应施加的本地命令向量 包含滚转轴的命令</returns>
+        private Vector3D 加入本地滚转(IMyGyro 陀螺仪, Vector3D 陀螺仪本地命令, double 弧度每秒 = 0.0)
+        {
+            Vector3D 该陀螺仪点积 = 陀螺仪对轴(陀螺仪, 控制器);
 
+            // 检查各轴与导弹Z轴的点积，判断是否同向
+            double X轴点积 = Math.Abs(该陀螺仪点积.X);
+            double Y轴点积 = Math.Abs(该陀螺仪点积.Y);
+            double Z轴点积 = Math.Abs(该陀螺仪点积.Z);
+
+            if (X轴点积 > 参数们.推进器方向容差 && X轴点积 >= Y轴点积 && X轴点积 >= Z轴点积)
+            {
+                陀螺仪本地命令.X = Math.Sign(该陀螺仪点积.X) * 弧度每秒;
+            }
+            else if (Y轴点积 > 参数们.推进器方向容差 && Y轴点积 >= X轴点积 && Y轴点积 >= Z轴点积)
+            {
+                陀螺仪本地命令.Y = Math.Sign(该陀螺仪点积.Y) * 弧度每秒;
+            }
+            else if (Z轴点积 > 参数们.推进器方向容差 && Z轴点积 >= X轴点积 && Z轴点积 >= Y轴点积)
+            {
+                陀螺仪本地命令.Z = Math.Sign(该陀螺仪点积.Z) * 弧度每秒;
+            }
+            return 陀螺仪本地命令;
+        }
+
+        /// <summary>
+        /// 计算陀螺仪各轴与导弹Z轴的点积并缓存
+        /// 如果有缓存则直接取出
+        /// 目的：找出滚转轴
+        /// </summary>
+        private Vector3D 陀螺仪对轴(IMyGyro 陀螺仪, IMyShipController 控制器)
+        {
             // 获取导弹Z轴方向（控制器的前进方向）
             Vector3D 导弹Z轴方向 = 控制器.WorldMatrix.Forward;
 
@@ -1331,35 +1364,16 @@ namespace IngameScript
                 );
                 陀螺仪各轴点积[陀螺仪] = 该陀螺仪点积;
             }
-
-            // 检查各轴与导弹Z轴的点积，判断是否同向
-            double X轴点积 = Math.Abs(该陀螺仪点积.X);
-            double Y轴点积 = Math.Abs(该陀螺仪点积.Y);
-            double Z轴点积 = Math.Abs(该陀螺仪点积.Z);
-
-            // 找出最接近同向的轴并将其命令置零
-            if (X轴点积 > 参数们.推进器方向容差)
-            {
-                陀螺仪本地命令.X = 0; // 忽略Pitch轴
-            }
-            else if (Y轴点积 > 参数们.推进器方向容差)
-            {
-                陀螺仪本地命令.Y = 0; // 忽略Yaw轴
-            }
-            else if (Z轴点积 > 参数们.推进器方向容差)
-            {
-                陀螺仪本地命令.Z = 0; // 忽略Roll轴
-            }
-
-            return 陀螺仪本地命令;
-        }    
-
+            return 该陀螺仪点积;
+        }
+        
         /// <summary>
         /// 判断是否需要更新陀螺仪命令
         /// 如果当前值已经接近最大值，且新命令在同方向且更大，则不更新
         /// 如果差异很小，也不更新
+        /// 目的：减少陀螺仪频繁更新导致出力不足
         /// </summary>
-        private bool 需要更新陀螺仪命令(double 当前值, double 新值, double 容差 = 1e-3)
+        private bool 陀螺仪命令需更新(double 当前值, double 新值, double 容差 = 1e-3)
         {
 
             if (Math.Abs(当前值) > 陀螺仪最高转速 - 容差)
@@ -1527,11 +1541,11 @@ namespace IngameScript
                 当前索引 = i;
             }
 
-            // 输出调试信息
-            if (需要的力 > 总分配力 + 0.001)
-            {
-                Echo($"[推进器] 轴向 {激活组名}推力缺口");
-            }
+            // // 输出调试信息
+            // if (需要的力 > 总分配力 + 0.001)
+            // {
+            //     Echo($"[推进器] 轴向 {激活组名}推力缺口");
+            // }
 
             // 关闭剩余的推进器
             for (int i = 当前索引; i < 推进器组.Count; i++)
@@ -1573,6 +1587,7 @@ namespace IngameScript
                     if (控制器 != null)
                     {
                         测试目标位置 = 控制器.GetPosition() + 控制器.WorldMatrix.Backward * 1000;
+                        测试目标位置.X += 1; // 轻微偏移以避免与前向重合
                         需要更新目标 = true;
                     }
                 }
@@ -1629,7 +1644,9 @@ namespace IngameScript
                     Vector3D 目标角度 = 计算目标角度(到目标向量 * 10, 控制器);
                     应用陀螺仪控制(目标角度);
                     Echo($"测试状态控制中");
-                    Echo($"目标位置: {最新目标位置}");
+                    // Echo($"目标位置: {最新目标位置}");
+                    Echo($"PID外环参数: P={参数们.外环参数.P系数}, I={参数们.外环参数.I系数}, D={参数们.外环参数.D系数}");
+                    Echo($"PID内环参数: P={参数们.内环参数.P系数}, I={参数们.内环参数.I系数}, D={参数们.内环参数.D系数}");
                 }
                 else
                 {

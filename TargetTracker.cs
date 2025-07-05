@@ -366,6 +366,7 @@ namespace IngameScript
             }
             // 更新最大加速度
             maxTargetAcceleration = Math.Max(maxTargetAcceleration, acceleration.Length());
+
             return new SimpleTargetInfo(predictedPos, predictedVel, p0.TimeStamp + futureTimeMs);
         }
 

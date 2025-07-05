@@ -127,12 +127,12 @@ namespace IngameScript
         /// <summary>
         /// 外环PID参数
         /// </summary>
-        public PID参数 外环参数 { get; set; } = new PID参数(4, 0, 0);
+        public PID参数 外环参数 { get; set; } = new PID参数(5, 0, 0);
 
         /// <summary>
         /// 内环PID参数
         /// </summary>
-        public PID参数 内环参数 { get; set; } = new PID参数(21, 0.008, 0.9);
+        public PID参数 内环参数 { get; set; } = new PID参数(21, 0.01, 0.9);
 
         #endregion
 
@@ -155,7 +155,7 @@ namespace IngameScript
         /// <summary>
         /// 战斗块更新目标间隔(正常状态)
         /// </summary>
-        public int 战斗块更新间隔正常 { get; set; } = 1;
+        public int 战斗块更新间隔正常 { get; set; } = 0;
 
         /// <summary>
         /// 战斗块更新目标间隔(跟踪状态)
@@ -173,12 +173,14 @@ namespace IngameScript
 
         #endregion
 
-        #region 推进器控制参数
+        #region 飞控硬件参数
 
         /// <summary>
         /// 推进器和陀螺仪的方向容差
         /// </summary>
         public double 推进器方向容差 { get; set; } = 0.9;
+
+        public double 常驻滚转转速 { get; set; } = 0.0; // 常驻滚转转速(弧度/秒)
 
         #endregion
 
@@ -273,7 +275,20 @@ namespace IngameScript
                 尝试设置参数(键, 值);
             }
         }
-
+        // 并在类内添加解析方法：
+        private PID参数 解析PID参数(string 参数值)
+        {
+            // 支持格式: "P,I,D"
+            var arr = 参数值.Split(',');
+            if (arr.Length == 3)
+            {
+                double p = double.Parse(arr[0]);
+                double i = double.Parse(arr[1]);
+                double d = double.Parse(arr[2]);
+                return new PID参数(p, i, d);
+            }
+            return new PID参数(0, 0, 0);
+        }
         /// <summary>
         /// 尝试设置指定的参数
         /// </summary>
@@ -350,6 +365,15 @@ namespace IngameScript
                     case "组名前缀":
                         组名前缀 = 参数值;
                         break;
+                    case "外环PID3":
+                        外环参数 = 解析PID参数(参数值);
+                        break;
+                    case "内环PID3":
+                        内环参数 = 解析PID参数(参数值);
+                        break;
+                    case "常驻滚转转速":
+                        常驻滚转转速 = double.Parse(参数值);
+                        break;
                 }
             }
             catch (Exception)
@@ -406,10 +430,17 @@ namespace IngameScript
             配置.AppendLine();
             配置.AppendLine("// 性能统计参数");
             配置.AppendLine($"性能统计重置间隔={性能统计重置间隔}");
-            配置.AppendLine();
-            配置.AppendLine("// 组名配置");
+            配置.AppendLine();   
             配置.AppendLine($"组名前缀={组名前缀}");
-
+            配置.AppendLine();
+            配置.AppendLine("// 三轴一致外环PID参数");
+            配置.AppendLine($"外环PID3={外环参数.P系数},{外环参数.I系数},{外环参数.D系数}");
+            配置.AppendLine("// 三轴一致内环PID参数");
+            配置.AppendLine($"内环PID3={内环参数.P系数},{内环参数.I系数},{内环参数.D系数}");
+            配置.AppendLine();
+            配置.AppendLine("// 飞控硬件参数");
+            配置.AppendLine($"常驻滚转转速={常驻滚转转速}"); // 常驻滚转转速(弧度/秒)
+            配置.AppendLine("// 常驻滚转转速可能会影响导弹的方向稳定性");
             return 配置.ToString();
         }
 

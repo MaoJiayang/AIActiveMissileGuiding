@@ -1,5 +1,6 @@
 using System;
 using VRage.Game.ModAPI.Ingame;
+using VRageMath;
 
 namespace IngameScript
 {
@@ -9,11 +10,6 @@ namespace IngameScript
     public class 参数管理器
     {
         #region 制导相关参数
-
-        /// <summary>
-        /// 滑翔模式开关
-        /// </summary>
-        public bool 滑翔模式 { get; set; } = false;
 
         /// <summary>
         /// 向量最小有效长度
@@ -49,6 +45,10 @@ namespace IngameScript
         /// 导航常数最大值
         /// </summary>
         public double 导航常数最大值 { get; set; } = 15;
+        /// <summary>
+        /// 是否启用攻击角度约束
+        /// </summary>
+        public bool 启用攻击角度约束 { get; set; } = true;
 
         #endregion
 
@@ -300,9 +300,6 @@ namespace IngameScript
             {
                 switch (参数名)
                 {
-                    case "滑翔模式":
-                        滑翔模式 = bool.Parse(参数值);
-                        break;
                     case "最小向量长度":
                         最小向量长度 = double.Parse(参数值);
                         break;
@@ -397,7 +394,6 @@ namespace IngameScript
             配置.AppendLine("// 不要修改任何参数，除非你知道以下三件事：");
             配置.AppendLine("// 是什么，如何工作，可能的影响。");
             配置.AppendLine("// 制导相关参数");
-            配置.AppendLine($"滑翔模式={滑翔模式}");
             配置.AppendLine($"最小向量长度={最小向量长度}");
             配置.AppendLine($"最小接近加速度={最小接近加速度}");
             配置.AppendLine($"时间常数={时间常数}");

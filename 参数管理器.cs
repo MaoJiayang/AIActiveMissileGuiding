@@ -50,6 +50,12 @@ namespace IngameScript
         /// </summary>
         public bool 启用攻击角度约束 { get; set; } = true;
 
+        /// <summary>
+        ///  补偿项失效距离(米)
+        /// 当目标距离小于此值时，补偿项将不再生效
+        /// </summary>
+        public double 补偿项失效距离 { get; set; } = 100.0;
+
         #endregion
 
         #region 引爆相关参数

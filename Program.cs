@@ -521,12 +521,12 @@ namespace IngameScript
                 推进器.ThrustOverride = 0f; // 重置推力覆盖
             }
 
-            // 启用陀螺仪
-            foreach (var 陀螺仪 in 陀螺仪列表)
-            {
-                陀螺仪.Enabled = true;
-                陀螺仪.GyroOverride = false; // 先关闭覆盖，由控制逻辑接管
-            }
+            // 启用陀螺仪 实际上不需要，热发射时启动过了
+            // foreach (var 陀螺仪 in 陀螺仪列表)
+            // {
+            //     陀螺仪.Enabled = true;
+            //     陀螺仪.GyroOverride = true;
+            // }
 
             // 关闭重力发生器
             foreach (var 重力发生器 in 重力发生器列表)
@@ -557,10 +557,15 @@ namespace IngameScript
                 // 停止陀螺仪覆盖
                 foreach (var 陀螺仪 in 陀螺仪列表)
                 {
-                    陀螺仪.GyroOverride = false;
+                    陀螺仪.Pitch = 0f;
+                    陀螺仪.Yaw = 0f;
+                    陀螺仪.Roll = 0f;
                 }
+                目标跟踪器.ClearHistory();// 清空目标历史
+                内环PID控制器PYR.Reset(); // 重置内环PID控制器
+                外环PID控制器PYR.Reset(); // 重置外环PID控制器
             }
-            目标跟踪器.ClearHistory();// 清空目标历史
+
         }
 
         /// <summary>
@@ -952,10 +957,8 @@ namespace IngameScript
         {
             // 计算目标角度
             Vector3D 目标角度PYR = 计算陀螺仪目标角度(加速度命令, 控制器);
-
             // 控制陀螺仪
             应用陀螺仪控制(目标角度PYR);
-
             // 控制推进器
             控制推进器(加速度命令, 控制器);
         }
@@ -973,7 +976,6 @@ namespace IngameScript
             Vector3D 导弹速度 = 控制器.GetShipVelocities().LinearVelocity;
             Vector3D 目标位置 = 目标信息.Value.Position;
             Vector3D 目标速度 = 目标信息.Value.Velocity;
-
             Vector3D 导弹到目标 = 目标位置 - 导弹位置;
             double 距离 = 导弹到目标.Length();
             double 导弹速度长度 = 导弹速度.Length();
@@ -1003,7 +1005,13 @@ namespace IngameScript
             Vector3D 比例导航加速度 = 导航常数 * 相对速度大小 * Vector3D.Cross(视线角速度, 视线单位向量);
 
             // ----- 步骤4: 添加补偿项 -----
-            Vector3D 补偿项 = 比例导航加速度补偿项(目标信息.Value, 视线角速度.Normalized());
+            Vector3D 视线角速度方向;
+            double angVelSq = 视线角速度.LengthSquared();
+            if (angVelSq > 参数们.最小向量长度) // 角速度判0
+                视线角速度方向 = 视线角速度 / Math.Sqrt(angVelSq);
+            else
+                视线角速度方向 = Vector3D.Zero;
+            Vector3D 补偿项 = 比例导航加速度补偿项(目标信息.Value, 视线角速度方向);
             比例导航加速度 += 补偿项;
 
             // ----- 步骤5: 可选的攻击角度约束 -----
@@ -1278,17 +1286,13 @@ namespace IngameScript
             // ----------------- 外环：角度误差 → 期望角速度 (世界坐标系) -----------------
             // 使用PD控制器将角度误差转换为期望角速度
             Vector3D 期望角速度PYR = 外环PID控制器PYR.GetOutput(目标角度PYR);
-
             // ----------------- 内环：角速度误差 → 最终指令 (世界坐标系) -----------------
             // 获取飞船当前角速度（单位：弧度/秒），已在世界坐标系下
             Vector3D 当前角速度 = 控制器.GetShipVelocities().AngularVelocity;
-
             // 计算各轴角速度误差
             Vector3D 速率误差PYR = 期望角速度PYR - 当前角速度;
-
             // 内环PD：将角速度误差转换为最终下发指令
             Vector3D 最终旋转命令PYR = 内环PID控制器PYR.GetOutput(速率误差PYR);
-
             // ----------------- 应用到各陀螺仪 -----------------
             foreach (var 陀螺仪 in 陀螺仪列表)
             {

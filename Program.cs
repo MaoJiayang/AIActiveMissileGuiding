@@ -1002,13 +1002,13 @@ namespace IngameScript
             Vector3D 比例导航加速度 = 导航常数 * 相对速度大小 * Vector3D.Cross(视线角速度, 视线单位向量);
 
             // ----- 步骤4: 添加补偿项 -----
-            Vector3D 视线角速度方向;
-            double angVelSq = 视线角速度.LengthSquared();
-            if (angVelSq > 参数们.最小向量长度) // 角速度判0
-                视线角速度方向 = 视线角速度 / Math.Sqrt(angVelSq);
+            Vector3D 补偿项方向;
+            double 模平方 = 目标速度.LengthSquared();
+            if (模平方 > 参数们.最小向量长度) // 角速度判0
+                补偿项方向 = 目标速度 / Math.Sqrt(模平方);
             else
-                视线角速度方向 = Vector3D.Zero;
-            Vector3D 补偿项 = 比例导航加速度补偿项(目标信息.Value, 视线角速度方向);
+                补偿项方向 = Vector3D.Zero;
+            Vector3D 补偿项 = 比例导航加速度补偿项(目标信息.Value, 补偿项方向);
             比例导航加速度 += 补偿项;
 
             // ----- 步骤5: 可选的攻击角度约束 -----
@@ -1046,9 +1046,9 @@ namespace IngameScript
         /// 比例导航制导算法加速度补偿
         /// </summary>
         /// <param name="目标信息">目标信息</param>
-        /// <param name="视线角速度单位向量">视线角速度的单位向量</param>
+        /// <param name="补偿方向单位向量">视线角速度的单位向量</param>
         /// <returns>制导加速度补偿命令(世界坐标系)</returns>
-        private Vector3D 比例导航加速度补偿项(SimpleTargetInfo 目标信息, Vector3D 视线角速度单位向量)
+        private Vector3D 比例导航加速度补偿项(SimpleTargetInfo 目标信息, Vector3D 补偿方向单位向量)
         {
             double 目标速度模长 = 目标信息.Velocity.Length(); // 目标速度模长
             double 导弹速度模长 = 控制器.GetShipVelocities().LinearVelocity.Length(); // 导弹速度模长
@@ -1065,7 +1065,7 @@ namespace IngameScript
                 double 根号项 = Math.Sqrt(Math.Max(0, 1.0 - 1.0 / (速度比 * 速度比)));
                 C2 = 目标最大加速度 * 根号项;
             }
-            return C2 * 视线角速度单位向量; // 返回补偿项            
+            return C2 * 补偿方向单位向量; // 返回补偿项            
         }
 
         /// <summary>

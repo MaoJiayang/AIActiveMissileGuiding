@@ -62,7 +62,7 @@ namespace IngameScript
         private int 更新计数器 = 0;
         private bool 等待二阶段引爆 = false;
         private double 陀螺仪最高转速 = 2 * Math.PI;
-
+        private int 临时计数器 = 0;
         #endregion
 
         #region 硬件组件
@@ -340,11 +340,6 @@ namespace IngameScript
                     break;
 
                 case 导弹状态.跟踪目标:
-
-                    目标跟踪器.maxTargetAcceleration = 0;
-                    // 备注：跟踪目标将目标最大加速度设置为0是AI块无法识别是否是同一目标的妥协。
-                    // 备注：这么用实际上是在用当前目标的加速度作为目标最大加速度，不完全符合补偿的计算理论
-
                     if (!有有效目标)
                     {
                         // 目标完全丢失，立即切换到预测制导
@@ -590,6 +585,8 @@ namespace IngameScript
                 Vector3D 制导命令 = 比例导航制导(控制器, 目标信息);
                 应用制导命令(制导命令, 控制器);
             }
+            if (目标跟踪器.combinationError > 25.0)
+                临时计数器++;
         }
 
         /// <summary>
@@ -927,7 +924,7 @@ namespace IngameScript
             if (路径点列表.Count > 0)
             {
                 // 只获取最后一个路径点作为目标
-                var 路径点 = 路径点列表[路径点列表.Count - 1];
+                IMyAutopilotWaypoint 路径点 = 路径点列表[路径点列表.Count - 1];
 
                 // 从世界矩阵中直接提取位置坐标
                 MatrixD 矩阵 = 路径点.Matrix;
@@ -1139,16 +1136,15 @@ namespace IngameScript
             {
                 // 推进器能力不足，使用最小接近加速度
                 接近加速度 = 参数们.最小接近加速度 * 视线单位向量;
-                导航常数 = 参数们.计算导航常数(1e6, 视线.Length());
             }
             else
             {
                 double 径向加速度大小 = Math.Sqrt(径向分量平方);
                 径向加速度大小 = Math.Max(径向加速度大小, 参数们.最小接近加速度);
                 接近加速度 = 径向加速度大小 * 视线单位向量;
-                导航常数 = 参数们.计算导航常数(Math.Sqrt(世界最大加速度模长平方), 视线.Length());
+                
             }
-
+            导航常数 = 参数们.计算导航常数(Math.Sqrt(世界最大加速度模长平方), 视线.Length());
             // ----- 步骤6: 合成飞行方向加速度 -----
             Vector3D 飞行方向加速度 = 比例导航加速度 + 接近加速度;
 
@@ -1776,6 +1772,7 @@ namespace IngameScript
             // 清空并重新构建性能统计信息
             性能统计信息.Clear();
             性能统计信息.AppendLine("=== 性能统计 ===");
+            性能统计信息.AppendLine($"误差超限: {临时计数器}");
             性能统计信息.AppendLine($"上次运行: {上次运行时间毫秒:F3} ms");
             性能统计信息.AppendLine($"平均运行: {平均运行时间毫秒:F3} ms");
             性能统计信息.AppendLine($"最大运行: {最大运行时间毫秒:F3} ms");

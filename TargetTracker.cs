@@ -133,6 +133,7 @@ namespace IngameScript
         private const double TimeEpsilon = 1e-6; // 时间差最小值
         private const double LinearThreshold = 1; // 线性运动检测阈值
         private const double RadiusThreshold = 1e6; // 半径过大阈值
+        private const double MaxAccResetThreshold = 25.0; // 误差过大时重置最大加速度记录
 
         #endregion
 
@@ -364,8 +365,10 @@ namespace IngameScript
                 predictedPos = currentPos + currentVel * dt_predict + 0.5 * acceleration * dt_predict * dt_predict;
                 predictedVel = currentVel + acceleration * dt_predict;
             }
-            // 更新最大加速度
-            maxTargetAcceleration = Math.Max(maxTargetAcceleration, acceleration.Length());
+            
+            // 根据情况重置/更新最大加速度记录
+            if (combinationError >= MaxAccResetThreshold) maxTargetAcceleration = 0; 
+            else maxTargetAcceleration = Math.Max(maxTargetAcceleration, acceleration.Length());
 
             return new SimpleTargetInfo(predictedPos, predictedVel, p0.TimeStamp + futureTimeMs);
         }

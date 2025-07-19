@@ -147,7 +147,7 @@ namespace IngameScript
         /// <summary>
         /// 目标历史记录最大长度
         /// </summary>
-        public int 目标历史最大长度 { get; set; } = 3;
+        public int 目标历史最大长度 { get; set; } = 4;
 
         #endregion
 
@@ -377,6 +377,12 @@ namespace IngameScript
                     case "常驻滚转转速":
                         常驻滚转转速 = double.Parse(参数值);
                         break;
+                    case "战斗块更新间隔正常":
+                        战斗块更新间隔正常 = int.Parse(参数值);
+                        break;
+                    case "战斗块更新间隔跟踪":
+                        战斗块更新间隔跟踪 = int.Parse(参数值);
+                        break;
                 }
             }
             catch (Exception)
@@ -424,6 +430,8 @@ namespace IngameScript
             配置.AppendLine($"目标历史最大长度={目标历史最大长度}");
             配置.AppendLine();
             配置.AppendLine("// 飞行AI参数");
+            配置.AppendLine($"战斗块更新间隔正常={战斗块更新间隔正常}");
+            配置.AppendLine($"战斗块更新间隔跟踪={战斗块更新间隔跟踪}");
             配置.AppendLine($"最大速度限制={最大速度限制}");
             配置.AppendLine($"战斗块攻击模式={战斗块攻击模式}");
             配置.AppendLine($"目标优先级={目标优先级}");

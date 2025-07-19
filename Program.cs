@@ -1002,10 +1002,11 @@ namespace IngameScript
             Vector3D 比例导航加速度 = 导航常数 * 相对速度大小 * Vector3D.Cross(视线角速度, 视线单位向量);
 
             // ----- 步骤4: 添加补偿项 -----
+            // Vector3D 目标横向速度 = 目标速度 - Vector3D.Dot(目标速度, 视线单位向量) * 视线单位向量;
             Vector3D 补偿项方向;
-            double 模平方 = 目标速度.LengthSquared();
+            double 模平方 = 视线角速度.LengthSquared();
             if (模平方 > 参数们.最小向量长度) // 角速度判0
-                补偿项方向 = 目标速度 / Math.Sqrt(模平方);
+                补偿项方向 = 视线角速度 / Math.Sqrt(模平方);
             else
                 补偿项方向 = Vector3D.Zero;
             Vector3D 补偿项 = 比例导航加速度补偿项(目标信息.Value, 补偿项方向);

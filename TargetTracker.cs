@@ -52,67 +52,6 @@ namespace IngameScript
         
         public static CircularMotionParams Invalid => new CircularMotionParams { IsValid = false };
     }
-
-    public class BlockMotionTracker
-    {
-        private IMyTerminalBlock block;
-        private double updateIntervalSeconds;
-
-        private Vector3D lastPosition;
-        private MatrixD lastWorldMatrix;
-
-        public Vector3D LinearVelocity { get; private set; }
-        public Vector3D AngularVelocity { get; private set; }
-        public Vector3D Position { get; private set; }
-
-        /// <summary>
-        /// 构造函数
-        /// </summary>
-        /// <param name="block">任意方块</param>
-        /// <param name="updateIntervalSeconds">更新间隔（秒）</param>
-        public BlockMotionTracker(IMyTerminalBlock block, double updateIntervalSeconds = 0.1667)
-        {
-            this.block = block;
-            this.updateIntervalSeconds = Math.Max(1e-6, updateIntervalSeconds);
-            this.lastPosition = block.GetPosition();
-            this.lastWorldMatrix = block.WorldMatrix;
-            this.LinearVelocity = Vector3D.Zero;
-            this.AngularVelocity = Vector3D.Zero;
-            this.Position = lastPosition;
-        }
-
-        /// <summary>
-        /// 按固定时间间隔调用
-        /// </summary>
-        public void Update()
-        {
-            Vector3D currentPosition = block.GetPosition();
-            MatrixD currentWorldMatrix = block.WorldMatrix;
-
-            // 线速度
-            LinearVelocity = (currentPosition - lastPosition) / updateIntervalSeconds;
-
-            // 角速度（通过旋转矩阵差分近似）
-            MatrixD deltaRotation = MatrixD.Multiply(currentWorldMatrix.GetOrientation(), MatrixD.Transpose(lastWorldMatrix.GetOrientation()));
-            
-            // 使用QuaternionD进行角速度计算
-            QuaternionD deltaQuat = QuaternionD.CreateFromRotationMatrix(deltaRotation);
-            Vector3D axis;
-            double angle;
-            deltaQuat.GetAxisAngle(out axis, out angle);
-            
-            // 确保角度在合理范围内
-            if (angle > Math.PI)
-                angle = angle - 2 * Math.PI;
-            
-            AngularVelocity = axis * (angle / updateIntervalSeconds);
-
-            // 更新状态
-            lastPosition = currentPosition;
-            lastWorldMatrix = currentWorldMatrix;
-            Position = currentPosition;
-        }
-    }
     
     public partial class TargetTracker : MyGridProgram
     {

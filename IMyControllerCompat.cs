@@ -95,6 +95,7 @@ namespace IngameScript
         private Vector3D LinearVelocity;
         private Vector3D AngularVelocity;
         private Action<string> Echo;
+        private MyShipMass _缓存质量 = new MyShipMass(-1, -1, -1);
         public string CustomName { get { return block.CustomName; } }
         public MatrixD WorldMatrix { get { return block.WorldMatrix; } }
 
@@ -139,6 +140,9 @@ namespace IngameScript
         public MyShipVelocities GetShipVelocities() { return new MyShipVelocities(block.CubeGrid.LinearVelocity, AngularVelocity); }
         public MyShipMass CalculateShipMass()
         {
+            // 如果缓存有效，直接返回
+            if (_缓存质量.PhysicalMass >= 0)
+                return _缓存质量;
             IMyCubeGrid grid = block.CubeGrid;
             Vector3I min = grid.Min;
             Vector3I max = grid.Max;
@@ -159,7 +163,8 @@ namespace IngameScript
                             totalMass += 20f; // 假设每个空位置的质量为20kg,一个轻甲块的质量
                         }
                     }
-            return new MyShipMass(totalMass, totalMass, totalMass);
+            _缓存质量 = new MyShipMass(totalMass, totalMass, totalMass);
+            return _缓存质量;
         }
         public Vector3D GetPosition() { return block.GetPosition(); }
     }

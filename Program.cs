@@ -19,6 +19,9 @@ using VRage.Game.ObjectBuilders.Definitions;
 using VRageMath;
 // TODO：动态比例导引常数的距离逻辑中，将最大距离从2500改到发射点距离目标的距离。
 // TODO: 参数管理器版本控制，自动删除过期版本存储的配置数据并添加新的
+// TODO: 方块飞船质量计算查重
+// TODO: 方块角速度估算修修复：需要找到一个包括装甲块的办法
+// TODO: 方块角速度估算修修复：尝试加入有库存的方块的库存质量估计
 namespace IngameScript
 {
     public partial class Program : MyGridProgram
@@ -204,8 +207,8 @@ namespace IngameScript
             Vector3D 当前目标位置 = 从飞行块获取目标();
             // 更新目标状态
             更新目标状态(当前目标位置, argument);
-            
-            
+
+
             // 根据当前状态执行相应逻辑
             switch (导弹当前状态)
             {
@@ -651,8 +654,9 @@ namespace IngameScript
                 控制器 = new ShipControllerAdapter(控制器列表[0]);
             else
             {
-                // 控制器 = new BlockMotionTracker(Me, 参数们.陀螺仪更新间隔 * (1.0 / 60.0));
-                控制器 = new BlockMotionTracker(Me, (1.0 / 60.0));
+                控制器 = new BlockMotionTracker(Me, 参数们.陀螺仪更新间隔 * (1.0 / 60.0), Echo);
+                // 备注：如果在更新间隔之间旋转了超过2π，会导致估算角速度不准确（极端情况）
+                // 控制器 = new BlockMotionTracker(Me, (1.0 / 60.0));
             }
             // 获取推进器
             推进器列表.Clear();
@@ -1147,7 +1151,7 @@ namespace IngameScript
                 double 径向加速度大小 = Math.Sqrt(径向分量平方);
                 径向加速度大小 = Math.Max(径向加速度大小, 参数们.最小接近加速度);
                 接近加速度 = 径向加速度大小 * 视线单位向量;
-                
+
             }
             导航常数 = 参数们.计算导航常数(Math.Sqrt(世界最大加速度模长平方), 视线.Length());
             // ----- 步骤6: 合成飞行方向加速度 -----
@@ -1184,7 +1188,7 @@ namespace IngameScript
         }
 
         /// <summary>
-        /// 计算陀螺仪的目标转向角度
+        /// 计算陀螺仪的目标转向角度，使其指向加速度命令
         /// </summary>
         private Vector3D 计算陀螺仪目标角度(Vector3D 加速度命令, IMyControllerCompat 控制器)
         {
@@ -1281,13 +1285,10 @@ namespace IngameScript
                 return;
             }
             角度误差在容忍范围内 = false;
-            Vector3D 打印用角速度 = 控制器.GetShipVelocities().AngularVelocity;
-            Echo($"[陀螺仪] 当前角速度: X {打印用角速度.X:n1} Y {打印用角速度.Y:n1} Z {打印用角速度.Z:n1}");
-            控制器.Update();
             // 仅在指定更新间隔执行，减少过度控制
             if (更新计数器 % 参数们.陀螺仪更新间隔 != 0)
                 return;
-            
+            控制器.Update();
             // ----------------- 外环：角度误差 → 期望角速度 (世界坐标系) -----------------
             // 使用PD控制器将角度误差转换为期望角速度
             Vector3D 期望角速度PYR = 外环PID控制器PYR.GetOutput(目标角度PYR);
@@ -1576,7 +1577,8 @@ namespace IngameScript
         /// 测试陀螺仪控制
         /// </summary>
         private void 旋转控制测试(string argument)
-        {                // 根据参数更新目标到跟踪器中
+        {
+            // 根据参数更新目标到跟踪器中
             if (!string.IsNullOrEmpty(argument))
             {
                 long 当前时间戳 = (long)Math.Round(更新计数器 * 参数们.时间常数 * 1000);
@@ -1662,7 +1664,7 @@ namespace IngameScript
                     Vector3D 目标角度 = 计算陀螺仪目标角度(到目标向量 * 10, 控制器);
                     应用陀螺仪控制(目标角度);
                     Echo($"测试状态控制中");
-                    // Echo($"目标位置: {最新目标位置}");
+                    Echo($"自身质量: {控制器.CalculateShipMass().PhysicalMass:n1} kg");
                     Echo($"PID外环参数: P={参数们.外环参数.P系数}, I={参数们.外环参数.I系数}, D={参数们.外环参数.D系数}");
                     Echo($"PID内环参数: P={参数们.内环参数.P系数}, I={参数们.内环参数.I系数}, D={参数们.内环参数.D系数}");
                 }
@@ -1785,7 +1787,7 @@ namespace IngameScript
             if (控制器 is BlockMotionTracker)
             {
                 // 如果是BlockMotionTracker，显示警告信息
-                Echo("警告: 无控制器，使用代替方案");
+                Echo("警告: 无控制器");
             }
             // 清空并重新构建性能统计信息
             性能统计信息.Clear();

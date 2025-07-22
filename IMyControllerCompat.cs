@@ -94,15 +94,17 @@ namespace IngameScript
         private MatrixD lastWorldMatrix;
         private Vector3D LinearVelocity;
         private Vector3D AngularVelocity;
+        private Action<string> Echo;
         public string CustomName { get { return block.CustomName; } }
         public MatrixD WorldMatrix { get { return block.WorldMatrix; } }
 
-        public BlockMotionTracker(IMyTerminalBlock block, double updateIntervalSeconds = 0.0166666667)
+        public BlockMotionTracker(IMyTerminalBlock block, double updateIntervalSeconds = 0.0166666667, Action<string> Echo = null)
         {
             this.block = block;
             this.updateIntervalSeconds = Math.Max(1e-6, updateIntervalSeconds);
             this.lastWorldMatrix = block.WorldMatrix;
             this.AngularVelocity = Vector3D.Zero;
+            this.Echo = Echo ?? (msg => { }); // 默认空实现，避免空引用异常
         }
 
         /// <summary>
@@ -111,14 +113,22 @@ namespace IngameScript
         public void Update()
         {
             MatrixD currentWorldMatrix = block.WorldMatrix;
-            MatrixD deltaRotation = MatrixD.Multiply(currentWorldMatrix.GetOrientation(), MatrixD.Transpose(lastWorldMatrix.GetOrientation()));
+            MatrixD deltaRotation = MatrixD.Multiply(
+                currentWorldMatrix.GetOrientation(),
+                MatrixD.Transpose(lastWorldMatrix.GetOrientation())
+            );
             QuaternionD deltaQuat = QuaternionD.CreateFromRotationMatrix(deltaRotation);
             Vector3D axis;
             double angle;
             deltaQuat.GetAxisAngle(out axis, out angle);
             if (angle > Math.PI)
                 angle = (angle + Math.PI) % (2 * Math.PI) - Math.PI;
-            AngularVelocity = axis * (angle / updateIntervalSeconds);
+            Vector3D localAngularVelocity = axis * (angle / updateIntervalSeconds);
+
+            // 转换到世界坐标系
+            Vector3D worldAngularVelocity = Vector3D.TransformNormal(localAngularVelocity, block.WorldMatrix);
+
+            AngularVelocity = worldAngularVelocity;
             lastWorldMatrix = currentWorldMatrix;
         }
 
@@ -133,15 +143,22 @@ namespace IngameScript
             Vector3I min = grid.Min;
             Vector3I max = grid.Max;
             float totalMass = 0f;
+            var visited = new HashSet<IMySlimBlock>();
             for (int x = min.X; x <= max.X; x++)
-            for (int y = min.Y; y <= max.Y; y++)
-            for (int z = min.Z; z <= max.Z; z++)
-            {
-                Vector3I pos = new Vector3I(x, y, z);
-                IMySlimBlock slim = grid.GetCubeBlock(pos);
-                if (slim != null)
-                    totalMass += slim.Mass;
-            }
+                for (int y = min.Y; y <= max.Y; y++)
+                    for (int z = min.Z; z <= max.Z; z++)
+                    {
+                        Vector3I pos = new Vector3I(x, y, z);
+                        IMySlimBlock slim = grid.GetCubeBlock(pos);
+                        if (slim != null && visited.Add(slim))
+                        {
+                            totalMass += slim.Mass;
+                        }
+                        if (slim == null)
+                        {
+                            totalMass += 20f; // 假设每个空位置的质量为20kg,一个轻甲块的质量
+                        }
+                    }
             return new MyShipMass(totalMass, totalMass, totalMass);
         }
         public Vector3D GetPosition() { return block.GetPosition(); }

@@ -70,9 +70,9 @@ namespace IngameScript
 
         // 常量定义
         private const double TimeEpsilon = 1e-6; // 时间差最小值
-        private const double LinearThreshold = 1; // 线性运动检测阈值
+        private const double LinearThreshold = 0.01; // 线性运动检测阈值 sin θ＝0.01 约等于 θ≈0.57°
         private const double RadiusThreshold = 1e6; // 半径过大阈值
-        private const double MaxAccResetThreshold = 25.0; // 误差过大时重置最大加速度记录
+        private const double MaxAccResetThreshold = 20.0; // 误差超过20m/s时重置最大加速度记录
 
         #endregion
 
@@ -321,14 +321,17 @@ namespace IngameScript
         /// <returns>圆周运动参数</returns>
         private CircularMotionParams CalculateCircularMotionParams(SimpleTargetInfo p0, SimpleTargetInfo p1, SimpleTargetInfo p2)
         {
-            // 检测是否为线性运动
+            // 检测是否为近似共线（直线运动）
             Vector3D a = p1.Position - p0.Position;
             Vector3D b = p2.Position - p0.Position;
             Vector3D cross = Vector3D.Cross(a, b);
 
-            if (cross.LengthSquared() < LinearThreshold)
+            double a2 = a.LengthSquared();
+            double b2 = b.LengthSquared();
+            // cross² = |a|²·|b|²·sin²θ，归一化后判断 sin²θ < 阈值²
+            if (cross.LengthSquared() < a2 * b2 * LinearThreshold * LinearThreshold)
             {
-                return CircularMotionParams.Invalid; // 直线运动
+                return CircularMotionParams.Invalid; // 近似直线
             }
 
             // 计算外接圆参数

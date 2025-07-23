@@ -205,6 +205,7 @@ namespace IngameScript
         /// 导弹方块组名前缀
         /// </summary>
         public string 组名前缀 { get; set; } = "导弹";
+        public string 代理控制器前缀 { get; set; } = "代理";
 
         #endregion
 
@@ -383,6 +384,9 @@ namespace IngameScript
                     case "战斗块更新间隔跟踪":
                         战斗块更新间隔跟踪 = int.Parse(参数值);
                         break;
+                    case "代理控制器前缀":
+                        代理控制器前缀 = 参数值;
+                        break;
                 }
             }
             catch (Exception)
@@ -440,8 +444,9 @@ namespace IngameScript
             配置.AppendLine();
             配置.AppendLine("// 性能统计参数");
             配置.AppendLine($"性能统计重置间隔={性能统计重置间隔}");
-            配置.AppendLine();   
+            配置.AppendLine();
             配置.AppendLine($"组名前缀={组名前缀}");
+            配置.AppendLine($"代理控制器前缀={代理控制器前缀}");
             配置.AppendLine();
             配置.AppendLine("// 三轴一致外环PID参数");
             配置.AppendLine($"外环PID3={外环参数.P系数},{外环参数.I系数},{外环参数.D系数}");

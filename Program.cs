@@ -650,11 +650,23 @@ namespace IngameScript
             // 获取控制器
             List<IMyShipController> 控制器列表 = new List<IMyShipController>();
             方块组.GetBlocksOfType(控制器列表);
+            
             if (控制器列表.Count > 0)
                 控制器 = new ShipControllerAdapter(控制器列表[0]);
             else
             {
                 控制器 = new BlockMotionTracker(Me, 参数们.陀螺仪更新间隔 * (1.0 / 60.0), Echo);
+                // 如果没有找到控制器，尝试从组中寻找名称包含代理控制器前缀的Terminal方块
+                List<IMyTerminalBlock> 代理控制器列表 = new List<IMyTerminalBlock>();
+                方块组.GetBlocks(代理控制器列表);
+                foreach (var 代理控制器 in 代理控制器列表)
+                {
+                    if (代理控制器.CustomName.Contains(参数们.代理控制器前缀))
+                    {
+                        控制器 = new BlockMotionTracker(代理控制器, 参数们.陀螺仪更新间隔 * (1.0 / 60.0), Echo);
+                        break;
+                    }
+                }
                 // 备注：如果在更新间隔之间旋转了超过2π，会导致估算角速度不准确（极端情况）
                 // 控制器 = new BlockMotionTracker(Me, (1.0 / 60.0));
             }
@@ -1787,7 +1799,7 @@ namespace IngameScript
             if (控制器 is BlockMotionTracker)
             {
                 // 如果是BlockMotionTracker，显示警告信息
-                Echo("警告: 无控制器");
+                Echo($"无控警告: {控制器.CustomName}");
             }
             // 清空并重新构建性能统计信息
             性能统计信息.Clear();

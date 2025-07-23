@@ -199,7 +199,7 @@ namespace IngameScript
                 return;
             }
             更新计数器 = (更新计数器 + 1) % int.MaxValue;
-            if (更新计数器 % 参数们.方块更新间隔 == 0)
+            if (!控制器.IsFunctional || 更新计数器 % 参数们.方块更新间隔 == 0)
             {
                 已经初始化 = 初始化硬件();
             }
@@ -1800,6 +1800,8 @@ namespace IngameScript
             {
                 // 如果是BlockMotionTracker，显示警告信息
                 Echo($"无控警告: {控制器.CustomName}");
+                Echo($"有功能: {控制器.IsFunctional}");
+                Echo($"被移除: {控制器.Closed}");
             }
             // 清空并重新构建性能统计信息
             性能统计信息.Clear();

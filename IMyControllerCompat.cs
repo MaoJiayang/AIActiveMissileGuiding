@@ -81,6 +81,13 @@ namespace IngameScript
         MatrixD WorldMatrix { get; }
 
         /// <summary>
+        /// 控制器是否能够正常工作(耐久)
+        /// </summary>        
+        bool IsFunctional { get; }
+
+        bool Closed { get; }
+
+        /// <summary>
         /// 更新位置和速度（BlockMotionTracker需定期调用，真实控制器可为空实现）。
         /// </summary>
         void Update();
@@ -167,6 +174,8 @@ namespace IngameScript
             return _缓存质量;
         }
         public Vector3D GetPosition() { return block.GetPosition(); }
+        public bool IsFunctional { get { return block.IsFunctional; } }
+        public bool Closed { get { return block.Closed; } }
     }
 
     // 3. 控制器适配器
@@ -183,6 +192,8 @@ namespace IngameScript
         public Vector3D GetPosition() { return ctrl.GetPosition(); }
         public string CustomName { get { return ctrl.CustomName; } }
         public MatrixD WorldMatrix { get { return ctrl.WorldMatrix; } }
+        public bool IsFunctional { get { return ctrl.IsFunctional; } }
+        public bool Closed { get { return ctrl.Closed; } }
         public void Update()
         {
             // IMyShipController 不需要手动更新位置和速度

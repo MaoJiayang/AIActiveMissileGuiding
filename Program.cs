@@ -19,6 +19,9 @@ using VRage.Game.ObjectBuilders.Definitions;
 using VRageMath;
 // TODO：动态比例导引常数的距离逻辑中，将最大距离从2500改到发射点距离目标的距离。
 // TODO: 参数管理器版本控制，自动删除过期版本存储的配置数据并添加新的
+// TODO: 方块飞船质量计算查重
+// TODO: 方块角速度估算修修复：需要找到一个包括装甲块的办法
+// TODO: 方块角速度估算修修复：尝试加入有库存的方块的库存质量估计
 namespace IngameScript
 {
     public partial class Program : MyGridProgram
@@ -61,7 +64,7 @@ namespace IngameScript
         private int 更新计数器 = 0;
         private bool 等待二阶段引爆 = false;
         private double 陀螺仪最高转速 = 2 * Math.PI;
-
+        private int 临时计数器 = 0;
         #endregion
 
         #region 硬件组件
@@ -73,7 +76,7 @@ namespace IngameScript
         private IMyOffensiveCombatBlock 战斗块;
 
         // 控制组件
-        private IMyShipController 控制器;
+        private IMyControllerCompat 控制器;
         private List<IMyThrust> 推进器列表 = new List<IMyThrust>();
         private List<IMyGyro> 陀螺仪列表 = new List<IMyGyro>();
         private List<IMyGravityGeneratorBase> 重力发生器列表 = new List<IMyGravityGeneratorBase>();
@@ -159,7 +162,7 @@ namespace IngameScript
 
             // 陀螺仪的最大命令值
             陀螺仪最高转速 = Me.CubeGrid.GridSizeEnum == MyCubeSize.Large ? Math.PI : 2 * Math.PI;
-        
+
             // 设置更新频率为每tick执行
             Runtime.UpdateFrequency = UpdateFrequency.Update1;
             已经初始化 = 初始化硬件();
@@ -204,6 +207,7 @@ namespace IngameScript
             Vector3D 当前目标位置 = 从飞行块获取目标();
             // 更新目标状态
             更新目标状态(当前目标位置, argument);
+
 
             // 根据当前状态执行相应逻辑
             switch (导弹当前状态)
@@ -339,11 +343,6 @@ namespace IngameScript
                     break;
 
                 case 导弹状态.跟踪目标:
-
-                    目标跟踪器.maxTargetAcceleration = 0;
-                    // 备注：跟踪目标将目标最大加速度设置为0是AI块无法识别是否是同一目标的妥协。
-                    // 备注：这么用实际上是在用当前目标的加速度作为目标最大加速度，不完全符合补偿的计算理论
-
                     if (!有有效目标)
                     {
                         // 目标完全丢失，立即切换到预测制导
@@ -520,12 +519,12 @@ namespace IngameScript
                 推进器.ThrustOverride = 0f; // 重置推力覆盖
             }
 
-            // 启用陀螺仪
-            foreach (var 陀螺仪 in 陀螺仪列表)
-            {
-                陀螺仪.Enabled = true;
-                陀螺仪.GyroOverride = false; // 先关闭覆盖，由控制逻辑接管
-            }
+            // 启用陀螺仪 实际上不需要，热发射时启动过了
+            // foreach (var 陀螺仪 in 陀螺仪列表)
+            // {
+            //     陀螺仪.Enabled = true;
+            //     陀螺仪.GyroOverride = true;
+            // }
 
             // 关闭重力发生器
             foreach (var 重力发生器 in 重力发生器列表)
@@ -556,10 +555,15 @@ namespace IngameScript
                 // 停止陀螺仪覆盖
                 foreach (var 陀螺仪 in 陀螺仪列表)
                 {
-                    陀螺仪.GyroOverride = false;
+                    陀螺仪.Pitch = 0f;
+                    陀螺仪.Yaw = 0f;
+                    陀螺仪.Roll = 0f;
                 }
+                目标跟踪器.ClearHistory();// 清空目标历史
+                内环PID控制器PYR.Reset(); // 重置内环PID控制器
+                外环PID控制器PYR.Reset(); // 重置外环PID控制器
             }
-            目标跟踪器.ClearHistory();// 清空目标历史
+
         }
 
         /// <summary>
@@ -584,6 +588,8 @@ namespace IngameScript
                 Vector3D 制导命令 = 比例导航制导(控制器, 目标信息);
                 应用制导命令(制导命令, 控制器);
             }
+            if (目标跟踪器.combinationError > 25.0)
+                临时计数器++;
         }
 
         /// <summary>
@@ -644,9 +650,26 @@ namespace IngameScript
             // 获取控制器
             List<IMyShipController> 控制器列表 = new List<IMyShipController>();
             方块组.GetBlocksOfType(控制器列表);
+            
             if (控制器列表.Count > 0)
-                控制器 = 控制器列表[0];
-
+                控制器 = new ShipControllerAdapter(控制器列表[0]);
+            else
+            {
+                控制器 = new BlockMotionTracker(Me, 参数们.陀螺仪更新间隔 * (1.0 / 60.0), Echo);
+                // 如果没有找到控制器，尝试从组中寻找名称包含代理控制器前缀的Terminal方块
+                List<IMyTerminalBlock> 代理控制器列表 = new List<IMyTerminalBlock>();
+                方块组.GetBlocks(代理控制器列表);
+                foreach (var 代理控制器 in 代理控制器列表)
+                {
+                    if (代理控制器.CustomName.Contains(参数们.代理控制器前缀))
+                    {
+                        控制器 = new BlockMotionTracker(代理控制器, 参数们.陀螺仪更新间隔 * (1.0 / 60.0), Echo);
+                        break;
+                    }
+                }
+                // 备注：如果在更新间隔之间旋转了超过2π，会导致估算角速度不准确（极端情况）
+                // 控制器 = new BlockMotionTracker(Me, (1.0 / 60.0));
+            }
             // 获取推进器
             推进器列表.Clear();
             方块组.GetBlocksOfType(推进器列表);
@@ -921,7 +944,7 @@ namespace IngameScript
             if (路径点列表.Count > 0)
             {
                 // 只获取最后一个路径点作为目标
-                var 路径点 = 路径点列表[路径点列表.Count - 1];
+                IMyAutopilotWaypoint 路径点 = 路径点列表[路径点列表.Count - 1];
 
                 // 从世界矩阵中直接提取位置坐标
                 MatrixD 矩阵 = 路径点.Matrix;
@@ -947,91 +970,86 @@ namespace IngameScript
         /// <summary>
         /// 应用制导命令，控制陀螺仪和推进器
         /// </summary>
-        private void 应用制导命令(Vector3D 加速度命令, IMyShipController 控制器)
+        private void 应用制导命令(Vector3D 加速度命令, IMyControllerCompat 控制器)
         {
             // 计算目标角度
-            Vector3D 目标角度PYR = 计算目标角度(加速度命令, 控制器);
-
+            Vector3D 目标角度PYR = 计算陀螺仪目标角度(加速度命令, 控制器);
             // 控制陀螺仪
             应用陀螺仪控制(目标角度PYR);
-
             // 控制推进器
             控制推进器(加速度命令, 控制器);
         }
 
         /// <summary>
-        /// 比例导航制导算法 - 结合接近速度控制
+        /// 比例导航制导算法 - 结合接近速度控制和可选的攻击角度约束
         /// </summary>
         /// <param name="控制器">飞船控制器</param>
         /// <param name="目标信息">目标信息</param>
         /// <returns>制导加速度命令(世界坐标系)</returns>
-        private Vector3D 比例导航制导(IMyShipController 控制器, SimpleTargetInfo? 目标信息)
+        private Vector3D 比例导航制导(IMyControllerCompat 控制器, SimpleTargetInfo? 目标信息)
         {
             // ----- 步骤1: 获取基本状态信息 -----
-
-            // 获取导弹状态
             Vector3D 导弹位置 = 控制器.GetPosition();
             Vector3D 导弹速度 = 控制器.GetShipVelocities().LinearVelocity;
-
-            // 目标信息
             Vector3D 目标位置 = 目标信息.Value.Position;
             Vector3D 目标速度 = 目标信息.Value.Velocity;
-
-            // 计算导弹到目标的视线向量
             Vector3D 导弹到目标 = 目标位置 - 导弹位置;
             double 距离 = 导弹到目标.Length();
             double 导弹速度长度 = 导弹速度.Length();
+
             if (距离 < 参数们.最小向量长度)
-                return Vector3D.Zero; // 防止除零错误
+                return Vector3D.Zero;
 
             Vector3D 视线单位向量 = 导弹到目标 / 距离;
-
-            // ----- 步骤3: 计算相对速度 -----
             Vector3D 相对速度 = 目标速度 - 导弹速度;
 
-            // ----- 步骤4: 计算视线角速率 -----
-            // 视线角速度 = (导弹到目标 × 相对速度) / |导弹到目标|²
+            // ----- 步骤2: 计算视线角速率 -----
             Vector3D 视线角速度 = Vector3D.Cross(导弹到目标, 相对速度) /
-                            Math.Max(导弹到目标.LengthSquared(), 1); // 防止除零
+                                Math.Max(导弹到目标.LengthSquared(), 参数们.最小向量长度);
 
-            // ----- 步骤5: 计算真比例导航基础控制量 -----
-            // 计算基础比例导航加速度 (PN核心公式)
+            // ----- 步骤3: 计算标准比例导航加速度 -----
             Vector3D 导弹速度单位向量;
             if (导弹速度长度 < 参数们.最小向量长度)
             {
-                // 当导弹速度过小时，使用默认方向
                 导弹速度单位向量 = 视线单位向量.Normalized();
             }
             else
             {
-                // 正常情况下使用导弹速度的单位向量
                 导弹速度单位向量 = 导弹速度 / 导弹速度长度;
             }
 
             double 相对速度大小 = 相对速度.Length();
-            Vector3D 比例导航加速度;
-            if (参数们.滑翔模式)
-            {
-                比例导航加速度 = 导航常数 * 相对速度大小 * Vector3D.Cross(视线角速度, 导弹速度单位向量);
-            }
-            else
-            {
-                比例导航加速度 = 导航常数 * 相对速度大小 * Vector3D.Cross(视线角速度, 视线单位向量);
-            }
+            Vector3D 比例导航加速度 = 导航常数 * 相对速度大小 * Vector3D.Cross(视线角速度, 视线单位向量);
 
-            Vector3D 补偿项 = 比例导航加速度补偿项(目标信息.Value, 视线角速度.Normalized());
+            // ----- 步骤4: 添加补偿项 -----
+            // Vector3D 目标横向速度 = 目标速度 - Vector3D.Dot(目标速度, 视线单位向量) * 视线单位向量;
+            Vector3D 补偿项方向;
+            double 模平方 = 视线角速度.LengthSquared();
+            if (模平方 > 参数们.最小向量长度) // 角速度判0
+                补偿项方向 = 视线角速度 / Math.Sqrt(模平方);
+            else
+                补偿项方向 = Vector3D.Zero;
+            Vector3D 补偿项 = 比例导航加速度补偿项(目标信息.Value, 补偿项方向);
             比例导航加速度 += 补偿项;
+
+            // ----- 步骤5: 可选的攻击角度约束 -----
+            if (参数们.启用攻击角度约束)
+            {
+                Vector3D 攻击角度约束加速度 = 计算攻击角度约束加速度(导弹速度, 距离);
+                比例导航加速度 += 攻击角度约束加速度;
+
+                // 输出诊断信息
+                Echo($"[攻击角度] 约束项大小: {攻击角度约束加速度.Length():F1} m/s²");
+            }
 
             // ----- 步骤6: 计算接近分量并执行重力补偿后处理 -----
             Vector3D 最终加速度命令;
             if (导弹到目标.Length() > 参数们.最小向量长度)
             {
-                // 使用重力补偿后处理的接近加速度计算
                 最终加速度命令 = 计算接近加速度并重力补偿(导弹到目标, 比例导航加速度, 控制器);
             }
             else
             {
-                // 距离过近时，只进行重力补偿
                 Vector3D 重力加速度 = 控制器.GetNaturalGravity();
                 最终加速度命令 = 比例导航加速度 - 重力加速度;
             }
@@ -1049,9 +1067,9 @@ namespace IngameScript
         /// 比例导航制导算法加速度补偿
         /// </summary>
         /// <param name="目标信息">目标信息</param>
-        /// <param name="视线角速度单位向量">视线角速度的单位向量</param>
+        /// <param name="补偿方向单位向量">视线角速度的单位向量</param>
         /// <returns>制导加速度补偿命令(世界坐标系)</returns>
-        private Vector3D 比例导航加速度补偿项(SimpleTargetInfo 目标信息, Vector3D 视线角速度单位向量)
+        private Vector3D 比例导航加速度补偿项(SimpleTargetInfo 目标信息, Vector3D 补偿方向单位向量)
         {
             double 目标速度模长 = 目标信息.Velocity.Length(); // 目标速度模长
             double 导弹速度模长 = 控制器.GetShipVelocities().LinearVelocity.Length(); // 导弹速度模长
@@ -1068,7 +1086,7 @@ namespace IngameScript
                 double 根号项 = Math.Sqrt(Math.Max(0, 1.0 - 1.0 / (速度比 * 速度比)));
                 C2 = 目标最大加速度 * 根号项;
             }
-            return C2 * 视线角速度单位向量; // 返回补偿项            
+            return C2 * 补偿方向单位向量; // 返回补偿项            
         }
 
         /// <summary>
@@ -1078,7 +1096,7 @@ namespace IngameScript
         /// <param name="比例导航加速度">比例导航计算的加速度</param>
         /// <param name="控制器">飞船控制器，用于获取质量和坐标变换</param>
         /// <returns>经过重力补偿后处理的最终加速度命令</returns>
-        private Vector3D 计算接近加速度并重力补偿(Vector3D 视线, Vector3D 比例导航加速度, IMyShipController 控制器)
+        private Vector3D 计算接近加速度并重力补偿(Vector3D 视线, Vector3D 比例导航加速度, IMyControllerCompat 控制器)
         {
             Vector3D 视线单位向量 = Vector3D.Normalize(视线);
 
@@ -1139,16 +1157,15 @@ namespace IngameScript
             {
                 // 推进器能力不足，使用最小接近加速度
                 接近加速度 = 参数们.最小接近加速度 * 视线单位向量;
-                导航常数 = 参数们.计算导航常数(1e6, 视线.Length());
             }
             else
             {
                 double 径向加速度大小 = Math.Sqrt(径向分量平方);
                 径向加速度大小 = Math.Max(径向加速度大小, 参数们.最小接近加速度);
                 接近加速度 = 径向加速度大小 * 视线单位向量;
-                导航常数 = 参数们.计算导航常数(Math.Sqrt(世界最大加速度模长平方), 视线.Length());
-            }
 
+            }
+            导航常数 = 参数们.计算导航常数(Math.Sqrt(世界最大加速度模长平方), 视线.Length());
             // ----- 步骤6: 合成飞行方向加速度 -----
             Vector3D 飞行方向加速度 = 比例导航加速度 + 接近加速度;
 
@@ -1183,9 +1200,9 @@ namespace IngameScript
         }
 
         /// <summary>
-        /// 计算目标转向角度
+        /// 计算陀螺仪的目标转向角度，使其指向加速度命令
         /// </summary>
-        private Vector3D 计算目标角度(Vector3D 加速度命令, IMyShipController 控制器)
+        private Vector3D 计算陀螺仪目标角度(Vector3D 加速度命令, IMyControllerCompat 控制器)
         {
             // 计算加速度方向作为期望的转向（世界坐标系）
             Vector3D 期望方向 = Vector3D.Normalize(加速度命令);
@@ -1210,7 +1227,18 @@ namespace IngameScript
             Echo($"[陀螺仪] 角度误差: {角度误差 * 180.0 / Math.PI:n1} 度");
             return 目标角度PYR;
         }
-        
+
+        /// <summary>
+        /// 计算攻击角度约束所需的加速度补偿量
+        /// </summary>
+        /// <param name="导弹速度">当前导弹速度向量</param>
+        /// <param name="目标距离">导弹到目标的距离</param>
+        /// <returns>攻击角度约束加速度补偿向量</returns>
+        private Vector3D 计算攻击角度约束加速度(Vector3D 导弹速度, double 目标距离)
+        {
+            return Vector3D.Zero;
+        }
+
         /// <summary>
         /// 计算最接近时间和距离，匀速假设
         /// </summary>
@@ -1272,20 +1300,17 @@ namespace IngameScript
             // 仅在指定更新间隔执行，减少过度控制
             if (更新计数器 % 参数们.陀螺仪更新间隔 != 0)
                 return;
+            控制器.Update();
             // ----------------- 外环：角度误差 → 期望角速度 (世界坐标系) -----------------
             // 使用PD控制器将角度误差转换为期望角速度
             Vector3D 期望角速度PYR = 外环PID控制器PYR.GetOutput(目标角度PYR);
-
             // ----------------- 内环：角速度误差 → 最终指令 (世界坐标系) -----------------
             // 获取飞船当前角速度（单位：弧度/秒），已在世界坐标系下
             Vector3D 当前角速度 = 控制器.GetShipVelocities().AngularVelocity;
-
             // 计算各轴角速度误差
             Vector3D 速率误差PYR = 期望角速度PYR - 当前角速度;
-
             // 内环PD：将角速度误差转换为最终下发指令
             Vector3D 最终旋转命令PYR = 内环PID控制器PYR.GetOutput(速率误差PYR);
-
             // ----------------- 应用到各陀螺仪 -----------------
             foreach (var 陀螺仪 in 陀螺仪列表)
             {
@@ -1295,7 +1320,7 @@ namespace IngameScript
                 施加本地转速指令(陀螺仪, 陀螺仪本地转速命令);
             }
         }
-        
+
         /// <summary>
         /// 将本地指令实际应用到陀螺仪，带懒惰更新
         /// 仅在指令有变化时更新陀螺仪的转速
@@ -1307,8 +1332,8 @@ namespace IngameScript
             if (陀螺仪命令需更新(陀螺仪.Pitch, -(float)本地指令.X)) 陀螺仪.Pitch = -(float)本地指令.X;
             if (陀螺仪命令需更新(陀螺仪.Yaw, -(float)本地指令.Y)) 陀螺仪.Yaw = -(float)本地指令.Y;
             if (陀螺仪命令需更新(陀螺仪.Roll, -(float)本地指令.Z)) 陀螺仪.Roll = -(float)本地指令.Z;
-        }    
-        
+        }
+
         /// <summary>
         /// 找出滚转轴，并返回陀螺仪本地命令加上正确的滚转向量
         /// </summary>
@@ -1319,7 +1344,10 @@ namespace IngameScript
         private Vector3D 加入本地滚转(IMyGyro 陀螺仪, Vector3D 陀螺仪本地命令, double 弧度每秒 = 0.0)
         {
             Vector3D 该陀螺仪点积 = 陀螺仪对轴(陀螺仪, 控制器);
-
+            // if (弧度每秒 < 参数们.最小向量长度)
+            // {
+            //     return 陀螺仪本地命令; // 不需要滚转
+            // }
             // 检查各轴与导弹Z轴的点积，判断是否同向
             double X轴点积 = Math.Abs(该陀螺仪点积.X);
             double Y轴点积 = Math.Abs(该陀螺仪点积.Y);
@@ -1335,7 +1363,10 @@ namespace IngameScript
             }
             else if (Z轴点积 > 参数们.推进器方向容差 && Z轴点积 >= X轴点积 && Z轴点积 >= Y轴点积)
             {
-                陀螺仪本地命令.Z = Math.Sign(该陀螺仪点积.Z) * 弧度每秒;
+                陀螺仪本地命令.Z = -Math.Sign(该陀螺仪点积.Z) * 弧度每秒;
+                // 备注：已知se旋转绕负轴，所以指令传入的时候已经全部取负
+                // 又因为，该方法一般都用于直接覆盖已经计算好的陀螺仪本地命令，
+                // 所以这里需要根据转速再取一次负
             }
             return 陀螺仪本地命令;
         }
@@ -1345,7 +1376,7 @@ namespace IngameScript
         /// 如果有缓存则直接取出
         /// 目的：找出滚转轴
         /// </summary>
-        private Vector3D 陀螺仪对轴(IMyGyro 陀螺仪, IMyShipController 控制器)
+        private Vector3D 陀螺仪对轴(IMyGyro 陀螺仪, IMyControllerCompat 控制器)
         {
             // 获取导弹Z轴方向（控制器的前进方向）
             Vector3D 导弹Z轴方向 = 控制器.WorldMatrix.Forward;
@@ -1366,7 +1397,7 @@ namespace IngameScript
             }
             return 该陀螺仪点积;
         }
-        
+
         /// <summary>
         /// 判断是否需要更新陀螺仪命令
         /// 如果当前值已经接近最大值，且新命令在同方向且更大，则不更新
@@ -1396,7 +1427,7 @@ namespace IngameScript
         /// <summary>
         /// 控制推进器产生所需加速度
         /// </summary>
-        private void 控制推进器(Vector3D 绝对加速度, IMyShipController 控制器)
+        private void 控制推进器(Vector3D 绝对加速度, IMyControllerCompat 控制器)
         {
             if (更新计数器 % 参数们.陀螺仪更新间隔 != 0)
                 return;
@@ -1423,7 +1454,7 @@ namespace IngameScript
         /// <summary>
         /// 将推进器按方向分类并保存各轴向最大推力
         /// </summary>
-        private void 分类推进器(IMyShipController 控制器)
+        private void 分类推进器(IMyControllerCompat 控制器)
         {
             // 清空所有组中的推进器和推力记录
             foreach (var key in 推进器方向组.Keys.ToList())
@@ -1481,7 +1512,7 @@ namespace IngameScript
             // 确定应该使用哪个方向的推进器组
             string 激活组名 = 本地加速度 >= 0 ? 正方向组 : 负方向组;
             string 关闭组名 = 本地加速度 >= 0 ? 负方向组 : 正方向组;
-            
+
             // 首先关闭反方向的推进器组
             List<IMyThrust> 关闭组;
             if (推进器方向组.TryGetValue(关闭组名, out 关闭组))
@@ -1490,7 +1521,7 @@ namespace IngameScript
                 {
                     推进器.ThrustOverride = 0f;
                 }
-            }            
+            }
             // 获取对应方向的推进器组（已排序）
             List<IMyThrust> 推进器组;
             if (!推进器方向组.TryGetValue(激活组名, out 推进器组) || 推进器组.Count == 0)
@@ -1558,7 +1589,8 @@ namespace IngameScript
         /// 测试陀螺仪控制
         /// </summary>
         private void 旋转控制测试(string argument)
-        {                // 根据参数更新目标到跟踪器中
+        {
+            // 根据参数更新目标到跟踪器中
             if (!string.IsNullOrEmpty(argument))
             {
                 long 当前时间戳 = (long)Math.Round(更新计数器 * 参数们.时间常数 * 1000);
@@ -1641,10 +1673,10 @@ namespace IngameScript
 
                 if (到目标向量.Length() > 参数们.最小向量长度)
                 {
-                    Vector3D 目标角度 = 计算目标角度(到目标向量 * 10, 控制器);
+                    Vector3D 目标角度 = 计算陀螺仪目标角度(到目标向量 * 10, 控制器);
                     应用陀螺仪控制(目标角度);
                     Echo($"测试状态控制中");
-                    // Echo($"目标位置: {最新目标位置}");
+                    Echo($"自身质量: {控制器.CalculateShipMass().PhysicalMass:n1} kg");
                     Echo($"PID外环参数: P={参数们.外环参数.P系数}, I={参数们.外环参数.I系数}, D={参数们.外环参数.D系数}");
                     Echo($"PID内环参数: P={参数们.内环参数.P系数}, I={参数们.内环参数.I系数}, D={参数们.内环参数.D系数}");
                 }
@@ -1763,9 +1795,16 @@ namespace IngameScript
             // 计算平均运行时间
             double 平均运行时间毫秒 = 总运行时间毫秒 / 运行次数;
 
+            //如果用的是BlockMotionTracker，显示警告信息
+            if (控制器 is BlockMotionTracker)
+            {
+                // 如果是BlockMotionTracker，显示警告信息
+                Echo($"无控警告: {控制器.CustomName}");
+            }
             // 清空并重新构建性能统计信息
             性能统计信息.Clear();
             性能统计信息.AppendLine("=== 性能统计 ===");
+            性能统计信息.AppendLine($"误差超限: {临时计数器}");
             性能统计信息.AppendLine($"上次运行: {上次运行时间毫秒:F3} ms");
             性能统计信息.AppendLine($"平均运行: {平均运行时间毫秒:F3} ms");
             性能统计信息.AppendLine($"最大运行: {最大运行时间毫秒:F3} ms");

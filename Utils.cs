@@ -86,7 +86,12 @@ namespace IngameScript
                     if (_integral < _integralMin) _integral = _integralMin;
                 }
             }
-
+            
+            // 如果output为Nan，重置控制器
+            if (double.IsNaN(output) || double.IsInfinity(output))
+            {
+                Reset();
+            }
             return output;
         }
 

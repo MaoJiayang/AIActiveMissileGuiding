@@ -1,5 +1,6 @@
 using System;
 using VRage.Game.ModAPI.Ingame;
+using VRageMath;
 
 namespace IngameScript
 {
@@ -9,11 +10,6 @@ namespace IngameScript
     public class 参数管理器
     {
         #region 制导相关参数
-
-        /// <summary>
-        /// 滑翔模式开关
-        /// </summary>
-        public bool 滑翔模式 { get; set; } = false;
 
         /// <summary>
         /// 向量最小有效长度
@@ -49,6 +45,16 @@ namespace IngameScript
         /// 导航常数最大值
         /// </summary>
         public double 导航常数最大值 { get; set; } = 15;
+        /// <summary>
+        /// 是否启用攻击角度约束
+        /// </summary>
+        public bool 启用攻击角度约束 { get; set; } = true;
+
+        /// <summary>
+        ///  补偿项失效距离(米)
+        /// 当目标距离小于此值时，补偿项将不再生效
+        /// </summary>
+        public double 补偿项失效距离 { get; set; } = 100.0;
 
         #endregion
 
@@ -141,7 +147,7 @@ namespace IngameScript
         /// <summary>
         /// 目标历史记录最大长度
         /// </summary>
-        public int 目标历史最大长度 { get; set; } = 3;
+        public int 目标历史最大长度 { get; set; } = 4;
 
         #endregion
 
@@ -199,6 +205,7 @@ namespace IngameScript
         /// 导弹方块组名前缀
         /// </summary>
         public string 组名前缀 { get; set; } = "导弹";
+        public string 代理控制器前缀 { get; set; } = "代理";
 
         #endregion
 
@@ -300,9 +307,6 @@ namespace IngameScript
             {
                 switch (参数名)
                 {
-                    case "滑翔模式":
-                        滑翔模式 = bool.Parse(参数值);
-                        break;
                     case "最小向量长度":
                         最小向量长度 = double.Parse(参数值);
                         break;
@@ -374,6 +378,15 @@ namespace IngameScript
                     case "常驻滚转转速":
                         常驻滚转转速 = double.Parse(参数值);
                         break;
+                    case "战斗块更新间隔正常":
+                        战斗块更新间隔正常 = int.Parse(参数值);
+                        break;
+                    case "战斗块更新间隔跟踪":
+                        战斗块更新间隔跟踪 = int.Parse(参数值);
+                        break;
+                    case "代理控制器前缀":
+                        代理控制器前缀 = 参数值;
+                        break;
                 }
             }
             catch (Exception)
@@ -397,7 +410,6 @@ namespace IngameScript
             配置.AppendLine("// 不要修改任何参数，除非你知道以下三件事：");
             配置.AppendLine("// 是什么，如何工作，可能的影响。");
             配置.AppendLine("// 制导相关参数");
-            配置.AppendLine($"滑翔模式={滑翔模式}");
             配置.AppendLine($"最小向量长度={最小向量长度}");
             配置.AppendLine($"最小接近加速度={最小接近加速度}");
             配置.AppendLine($"时间常数={时间常数}");
@@ -422,6 +434,8 @@ namespace IngameScript
             配置.AppendLine($"目标历史最大长度={目标历史最大长度}");
             配置.AppendLine();
             配置.AppendLine("// 飞行AI参数");
+            配置.AppendLine($"战斗块更新间隔正常={战斗块更新间隔正常}");
+            配置.AppendLine($"战斗块更新间隔跟踪={战斗块更新间隔跟踪}");
             配置.AppendLine($"最大速度限制={最大速度限制}");
             配置.AppendLine($"战斗块攻击模式={战斗块攻击模式}");
             配置.AppendLine($"目标优先级={目标优先级}");
@@ -430,8 +444,9 @@ namespace IngameScript
             配置.AppendLine();
             配置.AppendLine("// 性能统计参数");
             配置.AppendLine($"性能统计重置间隔={性能统计重置间隔}");
-            配置.AppendLine();   
+            配置.AppendLine();
             配置.AppendLine($"组名前缀={组名前缀}");
+            配置.AppendLine($"代理控制器前缀={代理控制器前缀}");
             配置.AppendLine();
             配置.AppendLine("// 三轴一致外环PID参数");
             配置.AppendLine($"外环PID3={外环参数.P系数},{外环参数.I系数},{外环参数.D系数}");

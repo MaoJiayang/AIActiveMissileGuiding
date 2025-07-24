@@ -24,12 +24,13 @@ using VRageMath;
 // TODO: 方块角速度估算修修复：尝试加入有库存的方块的库存质量估计
 namespace IngameScript
 {
+
     public partial class Program : MyGridProgram
     {
         #region 参数管理
         // 参数管理器实例
         private 参数管理器 参数们 = new 参数管理器();
-        
+
         #endregion
 
         #region 状态变量
@@ -109,6 +110,8 @@ namespace IngameScript
         #region 性能统计
 
         private StringBuilder 性能统计信息 = new StringBuilder();
+        private StringBuilder 比例导航诊断信息 = new StringBuilder();
+        private string 性能统计缓存 = string.Empty;
         private double 总运行时间毫秒 = 0;
         private double 最大运行时间毫秒 = 0;
         private int 运行次数 = 0;
@@ -120,8 +123,8 @@ namespace IngameScript
         public Program()
         {
             // 初始化导弹状态数据
-            导弹状态信息 = 导弹状态量.创建初始状态();
-            
+            导弹状态信息 = new 导弹状态量();
+
             // 初始化参数管理器（可以从Me.CustomData读取配置）
             if (!string.IsNullOrWhiteSpace(Me.CustomData))
             {
@@ -243,10 +246,7 @@ namespace IngameScript
             导弹状态信息.上次状态 = 导弹状态信息.当前状态;
             Echo($"存在目标：{有有效目标}, 位置更新：{目标位置已改变}");
 
-            SimpleTargetInfo 导弹当前运动学信息 = new SimpleTargetInfo(控制器.GetPosition(), 控制器.GetShipVelocities().LinearVelocity, 当前时间戳ms);
-            导弹状态信息.当前加速度 = (导弹当前运动学信息.Velocity - 导弹状态信息.上帧运动学信息.Velocity) /
-                                (导弹当前运动学信息.TimeStamp - 导弹状态信息.上帧运动学信息.TimeStamp);
-            导弹状态信息.上帧运动学信息 = 导弹当前运动学信息;
+
 
             // 处理测试命令 - 进入测试状态
             if (!string.IsNullOrEmpty(argument))
@@ -583,15 +583,16 @@ namespace IngameScript
             Echo("状态: 预测制导");
             if (控制器 != null && 目标跟踪器.GetHistoryCount() > 0)
             {
-                // 使用预测位置进行制导
-                long 预测时间毫秒 = (long)Math.Round((更新计数器 - 上次目标更新时间) * 参数们.时间常数 * 1000);
-                SimpleTargetInfo 预测目标 = 目标跟踪器.PredictFutureTargetInfo(预测时间毫秒);
-
                 // long 拦截时间 = Math.Min(计算最接近时间(预测目标), 300);
                 // 预测目标 = 目标跟踪器.PredictFutureTargetInfo(拦截时间 + 预测时间毫秒);
-
-                Vector3D 制导命令 = 比例导航制导(控制器, 预测目标);
-                应用制导命令(制导命令, 控制器);
+                if (更新计数器 % 参数们.动力系统更新间隔 == 0)
+                {
+                    // 使用预测位置进行制导
+                    long 预测时间毫秒 = (long)Math.Round((更新计数器 - 上次目标更新时间) * 参数们.时间常数 * 1000);
+                    SimpleTargetInfo 预测目标 = 目标跟踪器.PredictFutureTargetInfo(预测时间毫秒);
+                    导弹状态信息.制导命令 = 比例导航制导(控制器, 预测目标);
+                }
+                应用制导命令(导弹状态信息.制导命令, 控制器);
             }
         }
 
@@ -633,12 +634,12 @@ namespace IngameScript
             // 获取控制器
             List<IMyShipController> 控制器列表 = new List<IMyShipController>();
             方块组.GetBlocksOfType(控制器列表);
-            
+
             if (控制器列表.Count > 0)
                 控制器 = new ShipControllerAdapter(控制器列表[0]);
             else
             {
-                控制器 = new BlockMotionTracker(Me, 参数们.陀螺仪更新间隔 * (1.0 / 60.0), Echo);
+                控制器 = new BlockMotionTracker(Me, 参数们.动力系统更新间隔 * (1.0 / 60.0), Echo);
                 // 如果没有找到控制器，尝试从组中寻找名称包含代理控制器前缀的Terminal方块
                 List<IMyTerminalBlock> 代理控制器列表 = new List<IMyTerminalBlock>();
                 方块组.GetBlocks(代理控制器列表);
@@ -646,7 +647,7 @@ namespace IngameScript
                 {
                     if (代理控制器.CustomName.Contains(参数们.代理控制器前缀))
                     {
-                        控制器 = new BlockMotionTracker(代理控制器, 参数们.陀螺仪更新间隔 * (1.0 / 60.0), Echo);
+                        控制器 = new BlockMotionTracker(代理控制器, 参数们.动力系统更新间隔 * (1.0 / 60.0), Echo);
                         break;
                     }
                 }
@@ -1020,9 +1021,6 @@ namespace IngameScript
             {
                 Vector3D 攻击角度约束加速度 = 计算攻击角度约束加速度(导弹速度, 距离);
                 比例导航加速度 += 攻击角度约束加速度;
-
-                // 输出诊断信息
-                Echo($"[攻击角度] 约束项大小: {攻击角度约束加速度.Length():F1} m/s²");
             }
 
             // ----- 步骤6: 计算接近分量并执行重力补偿后处理 -----
@@ -1037,11 +1035,12 @@ namespace IngameScript
                 最终加速度命令 = 比例导航加速度 - 重力加速度;
             }
 
-            // 输出诊断信息
-            Echo($"[比例导航] 目标最大过载: {目标跟踪器.maxTargetAcceleration:n1}");
-            Echo($"[比例导航] 补偿项：{补偿项.Length():n1} m/s²");
-            Echo($"[比例导航] 目标距离: {距离:n1} m");
-            Echo($"[比例导航] 当前加速度命令: {最终加速度命令.Length():n1} m/s²");
+            // 更新诊断信息
+            比例导航诊断信息.Clear();
+            比例导航诊断信息.AppendLine($"[比例导航] 目标最大过载: {目标跟踪器.maxTargetAcceleration:n1}");
+            比例导航诊断信息.AppendLine($"[比例导航] 补偿项：{补偿项.Length():n1} m/s²");
+            比例导航诊断信息.AppendLine($"[比例导航] 目标距离: {距离:n1} m");
+            比例导航诊断信息.AppendLine($"[比例导航] 当前加速度命令: {最终加速度命令.Length():n1} m/s²");
 
             return 最终加速度命令;
         }
@@ -1125,10 +1124,10 @@ namespace IngameScript
             }
 
             // ----- 步骤3: 将本地最大加速度向量转换到世界坐标系 -----
-            Vector3D 世界最大加速度向量 = Vector3D.TransformNormal(本地最大加速度向量, 控制器.WorldMatrix);
+            导弹状态信息.导弹世界主过载 = Vector3D.TransformNormal(本地最大加速度向量, 控制器.WorldMatrix);
 
             // ----- 步骤4: 在世界坐标系中计算直角三角形的径向分量 -----
-            double 世界最大加速度模长平方 = 世界最大加速度向量.LengthSquared();
+            double 世界最大加速度模长平方 = 导弹状态信息.导弹世界主过载.LengthSquared();
             double 比例导航加速度模长平方 = 比例导航加速度.LengthSquared();
 
             // 计算差值
@@ -1175,9 +1174,10 @@ namespace IngameScript
                 最终加速度命令 = 飞行方向加速度 - 重力加速度;
             }
 
-            // 输出诊断信息
-            Echo($"[推进器] 导弹主过载: {Math.Sqrt(世界最大加速度模长平方):n1} m/s²");
-            Echo($"[推进器] 比例导航常数: {导弹状态信息.导航常数:n1}");
+            SimpleTargetInfo 导弹当前运动学信息 = new SimpleTargetInfo(控制器.GetPosition(), 控制器.GetShipVelocities().LinearVelocity, 当前时间戳ms);
+            导弹状态信息.当前加速度 = (导弹当前运动学信息.Velocity - 导弹状态信息.上帧运动学信息.Velocity) /
+                                (导弹当前运动学信息.TimeStamp - 导弹状态信息.上帧运动学信息.TimeStamp);
+            导弹状态信息.上帧运动学信息 = 导弹当前运动学信息;
 
             return 最终加速度命令;
         }
@@ -1281,7 +1281,7 @@ namespace IngameScript
             }
             导弹状态信息.角度误差在容忍范围内 = false;
             // 仅在指定更新间隔执行，减少过度控制
-            if (更新计数器 % 参数们.陀螺仪更新间隔 != 0)
+            if (更新计数器 % 参数们.动力系统更新间隔 != 0)
                 return;
             控制器.Update();
             // ----------------- 外环：角度误差 → 期望角速度 (世界坐标系) -----------------
@@ -1412,7 +1412,7 @@ namespace IngameScript
         /// </summary>
         private void 控制推进器(Vector3D 绝对加速度, IMyControllerCompat 控制器)
         {
-            if (更新计数器 % 参数们.陀螺仪更新间隔 != 0)
+            if (更新计数器 % 参数们.动力系统更新间隔 != 0)
                 return;
             // 获取飞船质量（单位：kg）
             double 飞船质量 = 控制器.CalculateShipMass().PhysicalMass;
@@ -1797,10 +1797,19 @@ namespace IngameScript
             性能统计信息.AppendLine($"指令使用: {Runtime.CurrentInstructionCount}/{Runtime.MaxInstructionCount}");
             性能统计信息.AppendLine("================");
 
-            // 在Echo输出之前显示性能统计
-            Echo(性能统计信息.ToString());
-        }
+            打印各类状态信息();
 
+        }
+        private void 打印各类状态信息()
+        {
+            if (更新计数器 % 参数们.动力系统更新间隔 == 0)
+            {
+                性能统计缓存 = 导弹状态信息.获取导弹诊断信息().ToString() + '\n' +
+                    比例导航诊断信息.ToString() + '\n' +
+                    性能统计信息.ToString();
+            }
+            Echo(性能统计缓存);
+        }
         #endregion
     }
 }

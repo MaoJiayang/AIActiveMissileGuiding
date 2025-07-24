@@ -37,38 +37,65 @@ namespace IngameScript
     }
 
     /// <summary>
-    /// 导弹状态数据结构体 - 包含所有状态相关变量
+    /// 导弹状态数据类 - 包含所有状态相关变量
     /// </summary>
-    public struct 导弹状态量
+    public class 导弹状态量
     {
         public 导弹状态机 当前状态;
         public 导弹状态机 上次状态;
         public SimpleTargetInfo 上帧运动学信息;
         public Vector3D 当前加速度;
         public Vector3D 上次目标位置;
+        public Vector3D 制导命令;
+        public Vector3D 导弹世界主过载;
         public bool 角度误差在容忍范围内;
         public double 导航常数;
         public bool 等待二阶段引爆;
         public double 陀螺仪最高转速;
-
+        private StringBuilder 导弹状态信息;
         /// <summary>
         /// 初始化导弹状态数据
         /// </summary>
-        public static 导弹状态量 创建初始状态()
+        public 导弹状态量()
         {
-            return new 导弹状态量
+            当前状态 = 导弹状态机.待机状态;
+            上次状态 = 导弹状态机.待机状态;
+            上帧运动学信息 = new SimpleTargetInfo(Vector3D.Zero, Vector3D.Zero, 0);
+            当前加速度 = Vector3D.Zero;
+            上次目标位置 = Vector3D.Zero;
+            制导命令 = Vector3D.Zero;
+            导弹世界主过载 = Vector3D.Zero;
+            角度误差在容忍范围内 = false;
+            导航常数 = 3.0; // 默认值，会在初始化时设置
+            等待二阶段引爆 = false;
+            陀螺仪最高转速 = 2 * Math.PI;
+            导弹状态信息 = new StringBuilder();
+        }
+
+        public StringBuilder 获取导弹诊断信息()
+        {
+            导弹状态信息.Clear();
+            导弹状态信息.AppendLine($"[导弹状态] 当前状态: {当前状态转文字()}");
+            导弹状态信息.AppendLine($"[导弹状态] 导航常数: {导航常数:F2}");
+            导弹状态信息.AppendLine($"[导弹状态] 可用过载: {导弹世界主过载.Length():F2}");
+            导弹状态信息.AppendLine($"[导弹状态] 需用过载: {制导命令.Length():F2}");
+            return 导弹状态信息;
+        }
+        private string 当前状态转文字()
+        {
+            switch (当前状态)
             {
-                当前状态 = 导弹状态机.待机状态,
-                上次状态 = 导弹状态机.待机状态,
-                上帧运动学信息 = new SimpleTargetInfo(Vector3D.Zero, Vector3D.Zero, 0),
-                当前加速度 = Vector3D.Zero,
-                上次目标位置 = Vector3D.Zero,
-                角度误差在容忍范围内 = false,
-                导航常数 = 3.0, // 默认值，会在初始化时设置
-                等待二阶段引爆 = false,
-                陀螺仪最高转速 = 2 * Math.PI
-            };
-        }           
+                case 导弹状态机.待机状态: return "待机状态";
+                case 导弹状态机.热发射阶段: return "热发射阶段";
+                case 导弹状态机.搜索目标: return "搜索目标";
+                case 导弹状态机.跟踪目标: return "跟踪目标";
+                case 导弹状态机.预测制导: return "预测制导";
+                case 导弹状态机.测试状态: return "测试状态";
+                case 导弹状态机.引爆激发: return "引爆激发";
+                case 导弹状态机.引爆最终: return "引爆最终";
+                default: return "未知状态";
+            }
+        }
     }
     #endregion
 }

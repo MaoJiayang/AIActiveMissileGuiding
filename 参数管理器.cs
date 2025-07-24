@@ -86,7 +86,7 @@ namespace IngameScript
         /// <summary>
         /// 陀螺仪(现在是动力系统）更新间隔(ticks)
         /// </summary>
-        public int 陀螺仪更新间隔 { get; set; } = 5;
+        public int 动力系统更新间隔 { get; set; } = 5;
 
         /// <summary>
         /// 推进器重新分类间隔(ticks)
@@ -237,7 +237,7 @@ namespace IngameScript
         /// </summary>
         public double 获取PID时间常数()
         {
-            return 时间常数 * 陀螺仪更新间隔;
+            return 时间常数 * 动力系统更新间隔;
         }
 
         /// <summary>
@@ -332,7 +332,7 @@ namespace IngameScript
                         分离推进器名称 = 参数值;
                         break;
                     case "陀螺仪更新间隔":
-                        陀螺仪更新间隔 = int.Parse(参数值);
+                        动力系统更新间隔 = int.Parse(参数值);
                         break;
                     case "推进器重新分类间隔":
                         推进器重新分类间隔 = int.Parse(参数值);
@@ -424,7 +424,7 @@ namespace IngameScript
             配置.AppendLine($"分离推进器名称={分离推进器名称}");
             配置.AppendLine();
             配置.AppendLine("// 状态切换时间参数");
-            配置.AppendLine($"陀螺仪更新间隔={陀螺仪更新间隔}");
+            配置.AppendLine($"陀螺仪更新间隔={动力系统更新间隔}");
             配置.AppendLine($"推进器重新分类间隔={推进器重新分类间隔}");
             配置.AppendLine($"目标位置不变最大帧数={目标位置不变最大帧数}");
             配置.AppendLine($"预测制导持续帧数={预测制导持续帧数}");

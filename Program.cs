@@ -1015,27 +1015,32 @@ namespace IngameScript
 
             double 相对速度大小 = 相对速度.Length();
             Vector3D 比例导航加速度 = 导弹状态信息.导航常数 * 相对速度大小 * Vector3D.Cross(视线角速度, 视线单位向量);
-            // ----- 步骤4: 添加补偿项 -----
-            Vector3D 目标加速度 = 目标跟踪器.currentTargetAcceleration;
-            Vector3D 横向加速度 = Vector3D.Cross(视线单位向量, 目标加速度);
-            比例导航加速度 += 横向加速度;
+
+            // ----- 步骤4: 添加微分补偿项 -----
+            // Vector3D 目标加速度 = 目标跟踪器.currentTargetAcceleration;
+            // Vector3D 横向加速度 = Vector3D.Cross(视线单位向量, 目标加速度);
+            // 比例导航加速度 += 横向加速度;
+            Vector3D 微分补偿项 = 计算增强比例导航加速度补偿(距离, 视线单位向量, 视线角加速度, 导弹状态信息.当前加速度, 导弹状态信息.导航常数);
+            比例导航加速度 += 微分补偿项;
+
+            // ----- 步骤5: 添加积分补偿项 -----
             Vector3D 补偿项方向;
             double 模平方 = 视线角速度.LengthSquared();
             if (模平方 > 参数们.最小向量长度) // 角速度判0
                 补偿项方向 = 视线角速度 / Math.Sqrt(模平方);
             else
                 补偿项方向 = Vector3D.Zero;
-            Vector3D 补偿项 = 比例导航加速度补偿项(目标信息.Value, 补偿项方向);
-            比例导航加速度 += 补偿项;
+            Vector3D 积分补偿项 = 比例导航加速度稳态补偿项(目标信息.Value, 补偿项方向);
+            比例导航加速度 += 积分补偿项;
 
-            // ----- 步骤5: 可选的攻击角度约束 -----
+            // ----- 步骤6: 可选的攻击角度约束 -----
             if (参数们.启用攻击角度约束)
             {
                 Vector3D 攻击角度约束加速度 = 计算攻击角度约束加速度(导弹速度, 距离);
                 比例导航加速度 += 攻击角度约束加速度;
             }
 
-            // ----- 步骤6: 计算接近分量并执行重力补偿后处理 -----
+            // ----- 步骤7: 计算接近分量并执行重力补偿后处理 -----
             Vector3D 最终加速度命令;
             if (导弹到目标.Length() > 参数们.最小向量长度)
             {
@@ -1050,7 +1055,7 @@ namespace IngameScript
             // 更新诊断信息
             比例导航诊断信息.Clear();
             比例导航诊断信息.AppendLine($"[比例导航] 目标最大过载: {目标跟踪器.maxTargetAcceleration:n1}");
-            比例导航诊断信息.AppendLine($"[比例导航] 补偿项：{补偿项.Length():n1} m/s²");
+            比例导航诊断信息.AppendLine($"[比例导航] 补偿项：{积分补偿项.Length():n1} m/s²");
             比例导航诊断信息.AppendLine($"[比例导航] 目标距离: {距离:n1} m");
             比例导航诊断信息.AppendLine($"[比例导航] 当前加速度命令: {最终加速度命令.Length():n1} m/s²");
 
@@ -1058,12 +1063,13 @@ namespace IngameScript
         }
 
         /// <summary>
-        /// 比例导航制导算法加速度补偿
+        /// 比例导航制导算法加速度补偿，或可视为一种积分补偿
+        /// https://doi.org/10.3390/aerospace8080231
         /// </summary>
         /// <param name="目标信息">目标信息</param>
         /// <param name="补偿方向单位向量">视线角速度的单位向量</param>
         /// <returns>制导加速度补偿命令(世界坐标系)</returns>
-        private Vector3D 比例导航加速度补偿项(SimpleTargetInfo 目标信息, Vector3D 补偿方向单位向量)
+        private Vector3D 比例导航加速度稳态补偿项(SimpleTargetInfo 目标信息, Vector3D 补偿方向单位向量)
         {
             double 目标速度模长 = 目标信息.Velocity.Length(); // 目标速度模长
             double 导弹速度模长 = 控制器.GetShipVelocities().LinearVelocity.Length(); // 导弹速度模长
@@ -1081,6 +1087,40 @@ namespace IngameScript
                 C2 = 目标最大加速度 * 根号项;
             }
             return C2 * 补偿方向单位向量; // 返回补偿项            
+        }
+
+        /// <summary>
+        /// 计算 TAPN 补偿项（K = 0.5 * N）
+        /// a_tapn = K * ( 0.5 * R * (λ_ddot × l̂) + a_M,perp )
+        /// Augmented proportional navigation guidance law using angular acceleration measurements
+        /// https://patents.google.com/patent/US7446291B1/en by LOCKHEED MARTIN CORPORATION
+        /// </summary>
+        private Vector3D 计算增强比例导航加速度补偿(
+            double 距离,
+            Vector3D 视线单位向量,     // l̂
+            Vector3D 视线角加速度,     // λ_ddot（向量形式）
+            Vector3D 导弹当前线加速度, // a_M（世界坐标）
+            double 导航常数N           // N
+        )
+        {
+            // 1) 输入完备性检查
+            if (距离 < 参数们.最小向量长度 || 导航常数N <= 0)
+                return Vector3D.Zero;
+
+            // 2) K = 0.5 * N
+            double K = 0.5 * 导航常数N;
+
+            // 3) 计算导弹在 LOS 垂直方向的加速度分量 a_M,perp
+            Vector3D aM_parallel = Vector3D.Dot(导弹当前线加速度, 视线单位向量) * 视线单位向量;
+            Vector3D aM_perp = 导弹当前线加速度 - aM_parallel;
+
+            // 4) 把角加速度 λ_ddot 转为线加速度方向量：λ_ddot × l̂
+            Vector3D los2Dir = Vector3D.Cross(视线角加速度, 视线单位向量);
+
+            // 5) TAPN补偿项
+            Vector3D a_tapn = K * (0.5 * 距离 * los2Dir + aM_perp);
+
+            return a_tapn;
         }
 
         /// <summary>

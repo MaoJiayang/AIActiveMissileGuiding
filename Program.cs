@@ -26,44 +26,19 @@ namespace IngameScript
 {
     public partial class Program : MyGridProgram
     {
-        #region 枚举定义
-
-        /// <summary>
-        /// 导弹状态枚举
-        /// </summary>
-        private enum 导弹状态
-        {
-            待机状态,     // 待机状态，等待挂架分离
-            热发射阶段,   // 热发射阶段，挂架已分离但仍在清除挂架
-            搜索目标,    // 搜索目标
-            跟踪目标,    // 跟踪目标
-            预测制导,     // 预测制导
-            测试状态,
-            引爆激发,     // 引爆激发雷管组
-            引爆最终      // 引爆最终雷管组
-        }
-
-        #endregion
-
         #region 参数管理
-
         // 参数管理器实例
         private 参数管理器 参数们 = new 参数管理器();
-
+        
         #endregion
 
         #region 状态变量
-        private 导弹状态 导弹当前状态 = 导弹状态.待机状态;
-        private 导弹状态 导弹上次状态 = 导弹状态.待机状态;
-        private Vector3D 上次目标位置 = Vector3D.Zero;
-        private bool 角度误差在容忍范围内 = false;
-        private double 导航常数; // 导航常数将在初始化时设置
+        private 导弹状态量 导弹状态信息;
         private long 上次目标更新时间 = 0;
         private int 预测开始帧数 = 0;
         private int 热发射开始帧数 = 0;
         private int 更新计数器 = 0;
-        private bool 等待二阶段引爆 = false;
-        private double 陀螺仪最高转速 = 2 * Math.PI;
+        private long 当前时间戳ms { get { return (long)Math.Round(更新计数器 * 参数们.时间常数 * 1000); } }
         private int 临时计数器 = 0;
         #endregion
 
@@ -144,6 +119,9 @@ namespace IngameScript
 
         public Program()
         {
+            // 初始化导弹状态数据
+            导弹状态信息 = 导弹状态量.创建初始状态();
+            
             // 初始化参数管理器（可以从Me.CustomData读取配置）
             if (!string.IsNullOrWhiteSpace(Me.CustomData))
             {
@@ -158,18 +136,18 @@ namespace IngameScript
             目标跟踪器 = new TargetTracker(参数们.目标历史最大长度);
 
             // 初始化导航常数
-            导航常数 = 参数们.导航常数初始值;
+            导弹状态信息.导航常数 = 参数们.导航常数初始值;
 
             // 陀螺仪的最大命令值
-            陀螺仪最高转速 = Me.CubeGrid.GridSizeEnum == MyCubeSize.Large ? Math.PI : 2 * Math.PI;
+            导弹状态信息.陀螺仪最高转速 = Me.CubeGrid.GridSizeEnum == MyCubeSize.Large ? Math.PI : 2 * Math.PI;
 
             // 设置更新频率为每tick执行
             Runtime.UpdateFrequency = UpdateFrequency.Update1;
             已经初始化 = 初始化硬件();
             if (!挂架系统可用)
             {
-                导弹当前状态 = 导弹状态.搜索目标;
-                导弹上次状态 = 导弹状态.搜索目标;
+                导弹状态信息.当前状态 = 导弹状态机.搜索目标;
+                导弹状态信息.上次状态 = 导弹状态机.搜索目标;
                 激活导弹系统();
             }
         }
@@ -206,41 +184,41 @@ namespace IngameScript
             // 获取目标位置
             Vector3D 当前目标位置 = 从飞行块获取目标();
             // 更新目标状态
-            更新目标状态(当前目标位置, argument);
+            更新导弹状态(当前目标位置, argument);
 
 
             // 根据当前状态执行相应逻辑
-            switch (导弹当前状态)
+            switch (导弹状态信息.当前状态)
             {
-                case 导弹状态.待机状态:
+                case 导弹状态机.待机状态:
                     处理待机状态();
                     break;
 
-                case 导弹状态.热发射阶段:
+                case 导弹状态机.热发射阶段:
                     处理热发射阶段();
                     break;
 
-                case 导弹状态.搜索目标:
+                case 导弹状态机.搜索目标:
                     处理搜索状态();
                     break;
 
-                case 导弹状态.跟踪目标:
+                case 导弹状态机.跟踪目标:
                     处理跟踪状态(当前目标位置);
                     break;
 
-                case 导弹状态.预测制导:
+                case 导弹状态机.预测制导:
                     处理预测状态();
                     break;
 
-                case 导弹状态.测试状态:
+                case 导弹状态机.测试状态:
                     旋转控制测试(argument);
                     break;
 
-                case 导弹状态.引爆激发:
+                case 导弹状态机.引爆激发:
                     处理引爆激发状态();
                     break;
 
-                case 导弹状态.引爆最终:
+                case 导弹状态机.引爆最终:
                     处理引爆最终状态();
                     break;
             }
@@ -256,45 +234,50 @@ namespace IngameScript
         /// <summary>
         /// 更新目标状态和状态机转换
         /// </summary>
-        private void 更新目标状态(Vector3D 当前目标位置, string argument = "")
+        private void 更新导弹状态(Vector3D 当前目标位置, string argument = "")
         {
             bool 有有效目标 = !当前目标位置.Equals(Vector3D.NegativeInfinity);
-            bool 目标位置已改变 = !当前目标位置.Equals(上次目标位置);
-            bool 导弹正运行 = 导弹当前状态 != 导弹状态.待机状态 && 导弹当前状态 != 导弹状态.热发射阶段 &&
-                            导弹当前状态 != 导弹状态.引爆激发 && 导弹当前状态 != 导弹状态.引爆最终;
-            导弹上次状态 = 导弹当前状态;
+            bool 目标位置已改变 = !当前目标位置.Equals(导弹状态信息.上次目标位置);
+            bool 导弹正运行 = 导弹状态信息.当前状态 != 导弹状态机.待机状态 && 导弹状态信息.当前状态 != 导弹状态机.热发射阶段 &&
+                            导弹状态信息.当前状态 != 导弹状态机.引爆激发 && 导弹状态信息.当前状态 != 导弹状态机.引爆最终;
+            导弹状态信息.上次状态 = 导弹状态信息.当前状态;
             Echo($"存在目标：{有有效目标}, 位置更新：{目标位置已改变}");
+
+            SimpleTargetInfo 导弹当前运动学信息 = new SimpleTargetInfo(控制器.GetPosition(), 控制器.GetShipVelocities().LinearVelocity, 当前时间戳ms);
+            导弹状态信息.当前加速度 = (导弹当前运动学信息.Velocity - 导弹状态信息.上帧运动学信息.Velocity) /
+                                (导弹当前运动学信息.TimeStamp - 导弹状态信息.上帧运动学信息.TimeStamp);
+            导弹状态信息.上帧运动学信息 = 导弹当前运动学信息;
 
             // 处理测试命令 - 进入测试状态
             if (!string.IsNullOrEmpty(argument))
             {
                 if (argument.StartsWith("test"))
                 {
-                    导弹当前状态 = 导弹状态.测试状态;
+                    导弹状态信息.当前状态 = 导弹状态机.测试状态;
                     return; // 直接返回，跳过后续状态检查
                 }
                 else if (argument == "normal" || argument == "exit")
                 {
                     // 退出测试状态，返回搜索状态
-                    导弹当前状态 = 导弹状态.搜索目标;
+                    导弹状态信息.当前状态 = 导弹状态机.搜索目标;
                     return;
                 }
                 else if (argument.ToLower() == "detonate")
                 {
                     // 直接引爆命令
-                    导弹当前状态 = 导弹状态.引爆激发;
+                    导弹状态信息.当前状态 = 导弹状态机.引爆激发;
                     return;
                 }
                 else if (argument.ToLower() == "standby")
                 {
                     // 强制进入待机状态
-                    导弹当前状态 = 导弹状态.待机状态;
+                    导弹状态信息.当前状态 = 导弹状态机.待机状态;
                     return;
                 }
                 else if (argument.ToLower() == "launch")
                 {
                     // 强制进入热发射阶段
-                    导弹当前状态 = 导弹状态.热发射阶段;
+                    导弹状态信息.当前状态 = 导弹状态机.热发射阶段;
                     热发射开始帧数 = 更新计数器;
                     return;
                 }
@@ -307,52 +290,52 @@ namespace IngameScript
                 bool 距离触发 = 检查距离触发();
                 if (传感器触发 || 距离触发)
                 {
-                    导弹当前状态 = 导弹状态.引爆激发;
+                    导弹状态信息.当前状态 = 导弹状态机.引爆激发;
                     return;
                 }
             }
 
-            switch (导弹当前状态)
+            switch (导弹状态信息.当前状态)
             {
-                case 导弹状态.待机状态:
+                case 导弹状态机.待机状态:
                     // 在待机状态检查挂架分离
                     if (检查挂架分离())
                     {
-                        导弹当前状态 = 导弹状态.热发射阶段;
+                        导弹状态信息.当前状态 = 导弹状态机.热发射阶段;
                         热发射开始帧数 = 更新计数器;
                     }
                     break;
 
-                case 导弹状态.热发射阶段:
+                case 导弹状态机.热发射阶段:
                     // 热发射阶段超时后进入搜索状态
                     if (更新计数器 - 热发射开始帧数 > 参数们.热发射持续帧数)
                     {
-                        导弹当前状态 = 导弹状态.搜索目标;
+                        导弹状态信息.当前状态 = 导弹状态机.搜索目标;
                     }
                     break;
 
-                case 导弹状态.搜索目标:
+                case 导弹状态机.搜索目标:
                     if (有有效目标 && 导弹正运行)
                     {
                         // 搜索到第一个目标，切换到跟踪状态
-                        导弹当前状态 = 导弹状态.跟踪目标;
-                        上次目标位置 = 当前目标位置;
+                        导弹状态信息.当前状态 = 导弹状态机.跟踪目标;
+                        导弹状态信息.上次目标位置 = 当前目标位置;
                         上次目标更新时间 = 更新计数器;
                         战斗块.UpdateTargetInterval = 参数们.战斗块更新间隔跟踪; // 降低战斗块更新目标间隔
                     }
                     break;
 
-                case 导弹状态.跟踪目标:
+                case 导弹状态机.跟踪目标:
                     if (!有有效目标)
                     {
                         // 目标完全丢失，立即切换到预测制导
-                        导弹当前状态 = 导弹状态.预测制导;
+                        导弹状态信息.当前状态 = 导弹状态机.预测制导;
                         预测开始帧数 = 更新计数器;
                     }
                     else if (目标位置已改变)
                     {
                         // 目标位置更新，继续跟踪
-                        上次目标位置 = 当前目标位置;
+                        导弹状态信息.上次目标位置 = 当前目标位置;
                         上次目标更新时间 = 更新计数器;
                     }
                     else
@@ -360,32 +343,32 @@ namespace IngameScript
                         // 目标存在但位置未更新，检查超时
                         if (更新计数器 - 上次目标更新时间 <= 参数们.目标位置不变最大帧数)
                         {
-                            导弹当前状态 = 导弹状态.预测制导;
+                            导弹状态信息.当前状态 = 导弹状态机.预测制导;
                             预测开始帧数 = 更新计数器;
                         }
                     }
                     break;
 
-                case 导弹状态.预测制导:
+                case 导弹状态机.预测制导:
                     if (有有效目标 && 目标位置已改变)
                     {
                         // 目标重新出现且位置更新，切换回跟踪状态
-                        导弹当前状态 = 导弹状态.跟踪目标;
-                        上次目标位置 = 当前目标位置;
+                        导弹状态信息.当前状态 = 导弹状态机.跟踪目标;
+                        导弹状态信息.上次目标位置 = 当前目标位置;
                         上次目标更新时间 = 更新计数器;
                     }
                     else if (更新计数器 - 预测开始帧数 > 参数们.预测制导持续帧数)
                     {
                         // 预测制导超时，返回搜索状态
-                        导弹当前状态 = 导弹状态.搜索目标;
+                        导弹状态信息.当前状态 = 导弹状态机.搜索目标;
                     }
                     break;
 
-                case 导弹状态.测试状态:
+                case 导弹状态机.测试状态:
                     break;
 
-                case 导弹状态.引爆激发:
-                case 导弹状态.引爆最终:
+                case 导弹状态机.引爆激发:
+                case 导弹状态机.引爆最终:
                     // 引爆状态由对应的处理方法管理状态转换
                     break;
             }
@@ -399,7 +382,7 @@ namespace IngameScript
             Echo("状态: 待机中，等待挂架分离...");
 
             // 以方块更新间隔来处理组件状态设置
-            if (导弹上次状态 != 导弹状态.待机状态 || 更新计数器 % 参数们.方块更新间隔 == 1)
+            if (导弹状态信息.上次状态 != 导弹状态机.待机状态 || 更新计数器 % 参数们.方块更新间隔 == 1)
             {
                 // 关闭飞控AI组件 - 待机状态全部为false
                 if (飞行块 != null)
@@ -452,7 +435,7 @@ namespace IngameScript
             Echo("状态: 热发射阶段");
 
             // 以方块更新间隔来处理组件状态设置
-            if (导弹上次状态 != 导弹状态.热发射阶段)
+            if (导弹状态信息.上次状态 != 导弹状态机.热发射阶段)
             {
                 // 恢复气罐自动模式
                 if (氢气罐系统可用)
@@ -668,8 +651,8 @@ namespace IngameScript
                     }
                 }
                 // 备注：如果在更新间隔之间旋转了超过2π，会导致估算角速度不准确（极端情况）
-                // 控制器 = new BlockMotionTracker(Me, (1.0 / 60.0));
             }
+            导弹状态信息.上帧运动学信息 = new SimpleTargetInfo(控制器.GetPosition(), 控制器.GetShipVelocities().LinearVelocity, 当前时间戳ms);
             // 获取推进器
             推进器列表.Clear();
             方块组.GetBlocksOfType(推进器列表);
@@ -1002,7 +985,6 @@ namespace IngameScript
 
             Vector3D 视线单位向量 = 导弹到目标 / 距离;
             Vector3D 相对速度 = 目标速度 - 导弹速度;
-
             // ----- 步骤2: 计算视线角速率 -----
             Vector3D 视线角速度 = Vector3D.Cross(导弹到目标, 相对速度) /
                                 Math.Max(导弹到目标.LengthSquared(), 参数们.最小向量长度);
@@ -1019,10 +1001,11 @@ namespace IngameScript
             }
 
             double 相对速度大小 = 相对速度.Length();
-            Vector3D 比例导航加速度 = 导航常数 * 相对速度大小 * Vector3D.Cross(视线角速度, 视线单位向量);
-
+            Vector3D 比例导航加速度 = 导弹状态信息.导航常数 * 相对速度大小 * Vector3D.Cross(视线角速度, 视线单位向量);
             // ----- 步骤4: 添加补偿项 -----
-            // Vector3D 目标横向速度 = 目标速度 - Vector3D.Dot(目标速度, 视线单位向量) * 视线单位向量;
+            Vector3D 目标加速度 = 目标跟踪器.currentTargetAcceleration;
+            Vector3D 横向加速度 = Vector3D.Cross(视线单位向量, 目标加速度);
+            比例导航加速度 += 横向加速度;
             Vector3D 补偿项方向;
             double 模平方 = 视线角速度.LengthSquared();
             if (模平方 > 参数们.最小向量长度) // 角速度判0
@@ -1165,7 +1148,7 @@ namespace IngameScript
                 接近加速度 = 径向加速度大小 * 视线单位向量;
 
             }
-            导航常数 = 参数们.计算导航常数(Math.Sqrt(世界最大加速度模长平方), 视线.Length());
+            导弹状态信息.导航常数 = 参数们.计算导航常数(Math.Sqrt(世界最大加速度模长平方), 视线.Length());
             // ----- 步骤6: 合成飞行方向加速度 -----
             Vector3D 飞行方向加速度 = 比例导航加速度 + 接近加速度;
 
@@ -1194,7 +1177,7 @@ namespace IngameScript
 
             // 输出诊断信息
             Echo($"[推进器] 导弹主过载: {Math.Sqrt(世界最大加速度模长平方):n1} m/s²");
-            Echo($"[推进器] 比例导航常数: {导航常数:n1}");
+            Echo($"[推进器] 比例导航常数: {导弹状态信息.导航常数:n1}");
 
             return 最终加速度命令;
         }
@@ -1281,7 +1264,7 @@ namespace IngameScript
         {
             // 检查角度误差是否在阈值范围内
             double 角度误差大小 = 目标角度PYR.Length();
-            if (角度误差大小 < 参数们.角度误差最小值 && !角度误差在容忍范围内)
+            if (角度误差大小 < 参数们.角度误差最小值 && !导弹状态信息.角度误差在容忍范围内)
             {
                 // 角度误差很小，停止陀螺仪以减少抖动
                 foreach (var 陀螺仪 in 陀螺仪列表)
@@ -1293,10 +1276,10 @@ namespace IngameScript
                 // 重置所有PID控制器
                 外环PID控制器PYR.Reset();
                 内环PID控制器PYR.Reset();
-                角度误差在容忍范围内 = true;
+                导弹状态信息.角度误差在容忍范围内 = true;
                 return;
             }
-            角度误差在容忍范围内 = false;
+            导弹状态信息.角度误差在容忍范围内 = false;
             // 仅在指定更新间隔执行，减少过度控制
             if (更新计数器 % 参数们.陀螺仪更新间隔 != 0)
                 return;
@@ -1407,7 +1390,7 @@ namespace IngameScript
         private bool 陀螺仪命令需更新(double 当前值, double 新值, double 容差 = 1e-3)
         {
 
-            if (Math.Abs(当前值) > 陀螺仪最高转速 - 容差)
+            if (Math.Abs(当前值) > 导弹状态信息.陀螺仪最高转速 - 容差)
             {
                 // 当前值接近最大值
                 if (Math.Sign(当前值) == Math.Sign(新值) && Math.Abs(新值) >= Math.Abs(当前值))
@@ -1721,10 +1704,10 @@ namespace IngameScript
             if (!引爆系统可用 || 控制器 == null) return false;
 
             // 检查上次目标位置是否有效
-            if (上次目标位置.Equals(Vector3D.Zero)) return false;
+            if (导弹状态信息.上次目标位置.Equals(Vector3D.Zero)) return false;
 
             Vector3D 当前位置 = 控制器.GetPosition();
-            double 距离 = Vector3D.Distance(当前位置, 上次目标位置);
+            double 距离 = Vector3D.Distance(当前位置, 导弹状态信息.上次目标位置);
 
             return 距离 <= 参数们.引爆距离阈值;
         }
@@ -1744,8 +1727,8 @@ namespace IngameScript
             }
 
             // 标记等待二阶段引爆并转入下一状态
-            等待二阶段引爆 = true;
-            导弹当前状态 = 导弹状态.引爆最终;
+            导弹状态信息.等待二阶段引爆 = true;
+            导弹状态信息.当前状态 = 导弹状态机.引爆最终;
         }
 
         /// <summary>
@@ -1756,15 +1739,15 @@ namespace IngameScript
             Echo("状态: 引爆二阶段...");
 
             // 如果上一帧已触发激发雷管组，本帧触发引爆雷管组
-            if (等待二阶段引爆)
+            if (导弹状态信息.等待二阶段引爆)
             {
                 foreach (var 弹头 in 引爆雷管组)
                 {
                     弹头.IsArmed = true;
                     弹头.Detonate();
                 }
-                等待二阶段引爆 = false;
-                导弹当前状态 = 导弹状态.搜索目标;
+                导弹状态信息.等待二阶段引爆 = false;
+                导弹状态信息.当前状态 = 导弹状态机.搜索目标;
                 // 引爆完成，保持当前状态（导弹应该已经销毁）
             }
         }

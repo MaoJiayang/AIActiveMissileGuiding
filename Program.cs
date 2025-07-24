@@ -240,7 +240,7 @@ namespace IngameScript
         private void 更新导弹状态(Vector3D 当前目标位置, string argument = "")
         {
             bool 有有效目标 = !当前目标位置.Equals(Vector3D.NegativeInfinity);
-            bool 目标位置已改变 = !当前目标位置.Equals(导弹状态信息.上次目标位置);
+            bool 目标位置已改变 = !当前目标位置.Equals(导弹状态信息.上次真实目标位置);
             bool 导弹正运行 = 导弹状态信息.当前状态 != 导弹状态机.待机状态 && 导弹状态信息.当前状态 != 导弹状态机.热发射阶段 &&
                             导弹状态信息.当前状态 != 导弹状态机.引爆激发 && 导弹状态信息.当前状态 != 导弹状态机.引爆最终;
             导弹状态信息.上次状态 = 导弹状态信息.当前状态;
@@ -319,7 +319,7 @@ namespace IngameScript
                     {
                         // 搜索到第一个目标，切换到跟踪状态
                         导弹状态信息.当前状态 = 导弹状态机.跟踪目标;
-                        导弹状态信息.上次目标位置 = 当前目标位置;
+                        导弹状态信息.上次真实目标位置 = 当前目标位置;
                         上次目标更新时间 = 更新计数器;
                         战斗块.UpdateTargetInterval = 参数们.战斗块更新间隔跟踪; // 降低战斗块更新目标间隔
                     }
@@ -335,7 +335,7 @@ namespace IngameScript
                     else if (目标位置已改变)
                     {
                         // 目标位置更新，继续跟踪
-                        导弹状态信息.上次目标位置 = 当前目标位置;
+                        导弹状态信息.上次真实目标位置 = 当前目标位置;
                         上次目标更新时间 = 更新计数器;
                     }
                     else
@@ -354,7 +354,7 @@ namespace IngameScript
                     {
                         // 目标重新出现且位置更新，切换回跟踪状态
                         导弹状态信息.当前状态 = 导弹状态机.跟踪目标;
-                        导弹状态信息.上次目标位置 = 当前目标位置;
+                        导弹状态信息.上次真实目标位置 = 当前目标位置;
                         上次目标更新时间 = 更新计数器;
                     }
                     else if (更新计数器 - 预测开始帧数 > 参数们.预测制导持续帧数)
@@ -986,9 +986,21 @@ namespace IngameScript
 
             Vector3D 视线单位向量 = 导弹到目标 / 距离;
             Vector3D 相对速度 = 目标速度 - 导弹速度;
-            // ----- 步骤2: 计算视线角速率 -----
+
+            // ----- 步骤2: 计算视线角速度 -----
             Vector3D 视线角速度 = Vector3D.Cross(导弹到目标, 相对速度) /
                                 Math.Max(导弹到目标.LengthSquared(), 参数们.最小向量长度);
+
+            // ----- 步骤2.5 更新导弹上次状态 -----
+            // 更新上帧视线角速度，计算视线角加速度
+            Vector3D 视线角加速度 = (视线角速度 - 导弹状态信息.上帧视线角速度) /
+                                (当前时间戳ms - 导弹状态信息.上帧运动学信息.TimeStamp);
+            导弹状态信息.上帧视线角速度 = 视线角速度;
+            // 更新运动学信息和加速度
+            SimpleTargetInfo 导弹当前运动学信息 = new SimpleTargetInfo(控制器.GetPosition(), 控制器.GetShipVelocities().LinearVelocity, 当前时间戳ms);
+            导弹状态信息.当前加速度 = (导弹当前运动学信息.Velocity - 导弹状态信息.上帧运动学信息.Velocity) /
+                                (导弹当前运动学信息.TimeStamp - 导弹状态信息.上帧运动学信息.TimeStamp);
+            导弹状态信息.上帧运动学信息 = 导弹当前运动学信息;
 
             // ----- 步骤3: 计算标准比例导航加速度 -----
             Vector3D 导弹速度单位向量;
@@ -1173,11 +1185,6 @@ namespace IngameScript
                 // 飞行方向加速度过小，直接进行完整重力补偿
                 最终加速度命令 = 飞行方向加速度 - 重力加速度;
             }
-
-            SimpleTargetInfo 导弹当前运动学信息 = new SimpleTargetInfo(控制器.GetPosition(), 控制器.GetShipVelocities().LinearVelocity, 当前时间戳ms);
-            导弹状态信息.当前加速度 = (导弹当前运动学信息.Velocity - 导弹状态信息.上帧运动学信息.Velocity) /
-                                (导弹当前运动学信息.TimeStamp - 导弹状态信息.上帧运动学信息.TimeStamp);
-            导弹状态信息.上帧运动学信息 = 导弹当前运动学信息;
 
             return 最终加速度命令;
         }
@@ -1704,10 +1711,10 @@ namespace IngameScript
             if (!引爆系统可用 || 控制器 == null) return false;
 
             // 检查上次目标位置是否有效
-            if (导弹状态信息.上次目标位置.Equals(Vector3D.Zero)) return false;
+            if (导弹状态信息.上次真实目标位置.Equals(Vector3D.Zero)) return false;
 
             Vector3D 当前位置 = 控制器.GetPosition();
-            double 距离 = Vector3D.Distance(当前位置, 导弹状态信息.上次目标位置);
+            double 距离 = Vector3D.Distance(当前位置, 导弹状态信息.上次真实目标位置);
 
             return 距离 <= 参数们.引爆距离阈值;
         }

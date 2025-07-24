@@ -41,18 +41,25 @@ namespace IngameScript
     /// </summary>
     public class 导弹状态量
     {
+        // 每帧更新
         public 导弹状态机 当前状态;
         public 导弹状态机 上次状态;
-        public SimpleTargetInfo 上帧运动学信息;
+        public Vector3D 上次真实目标位置;// AI块的“每帧”
         public Vector3D 当前加速度;
-        public Vector3D 上次目标位置;
+        public bool 角度误差在容忍范围内; 
+
+        // 只更新一次
+        public double 陀螺仪最高转速;
+
+        // 计算密集型，每隔一段时间（动力系统更新间隔）更新或按需更新
+        public SimpleTargetInfo 上帧运动学信息;
+        public Vector3D 上帧视线角速度;
         public Vector3D 制导命令;
         public Vector3D 导弹世界主过载;
-        public bool 角度误差在容忍范围内;
         public double 导航常数;
         public bool 等待二阶段引爆;
-        public double 陀螺仪最高转速;
         private StringBuilder 导弹状态信息;
+
         /// <summary>
         /// 初始化导弹状态数据
         /// </summary>
@@ -62,7 +69,7 @@ namespace IngameScript
             上次状态 = 导弹状态机.待机状态;
             上帧运动学信息 = new SimpleTargetInfo(Vector3D.Zero, Vector3D.Zero, 0);
             当前加速度 = Vector3D.Zero;
-            上次目标位置 = Vector3D.Zero;
+            上次真实目标位置 = Vector3D.Zero;
             制导命令 = Vector3D.Zero;
             导弹世界主过载 = Vector3D.Zero;
             角度误差在容忍范围内 = false;
@@ -70,6 +77,7 @@ namespace IngameScript
             等待二阶段引爆 = false;
             陀螺仪最高转速 = 2 * Math.PI;
             导弹状态信息 = new StringBuilder();
+            上帧视线角速度 = Vector3D.Zero;
         }
 
         public StringBuilder 获取导弹诊断信息()

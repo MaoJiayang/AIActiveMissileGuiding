@@ -19,7 +19,7 @@ namespace IngameScript
         /// <summary>
         /// 最小接近加速度(m/s)
         /// </summary>
-        public double 最小接近加速度 { get; set; } = 2.5;
+        public double 最小接近加速度 { get; set; } = 9.8;
 
         /// <summary>
         /// 时间常数(秒)

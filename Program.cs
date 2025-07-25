@@ -40,7 +40,6 @@ namespace IngameScript
         private int 热发射开始帧数 = 0;
         private int 更新计数器 = 0;
         private long 当前时间戳ms { get { return (long)Math.Round(更新计数器 * 参数们.时间常数 * 1000); } }
-        private int 临时计数器 = 0;
         #endregion
 
         #region 硬件组件
@@ -574,8 +573,6 @@ namespace IngameScript
                 Vector3D 制导命令 = 比例导航制导(控制器, 目标信息);
                 应用制导命令(制导命令, 控制器);
             }
-            if (目标跟踪器.combinationError > 25.0)
-                临时计数器++;
         }
 
         /// <summary>
@@ -1118,8 +1115,8 @@ namespace IngameScript
             if (距离 < 参数们.最小向量长度 || 导航常数N <= 0)
                 return Vector3D.Zero;
 
-            // 2) K = 0.1 * N，magic number
-            double K = 0.1 * 导航常数N;
+            // 2) K = 0.12 * N，magic number
+            double K = 0.12 * 导航常数N;
 
             // 3) 计算导弹在 LOS 垂直方向的加速度分量 a_M,perp
             Vector3D aM_parallel = Vector3D.Dot(导弹当前线加速度, 视线单位向量) * 视线单位向量;
@@ -1844,7 +1841,6 @@ namespace IngameScript
             // 清空并重新构建性能统计信息
             性能统计信息.Clear();
             性能统计信息.AppendLine("=== 性能统计 ===");
-            性能统计信息.AppendLine($"误差超限: {临时计数器}");
             性能统计信息.AppendLine($"上次运行: {上次运行时间毫秒:F3} ms");
             性能统计信息.AppendLine($"平均运行: {平均运行时间毫秒:F3} ms");
             性能统计信息.AppendLine($"最大运行: {最大运行时间毫秒:F3} ms");

@@ -180,10 +180,13 @@ namespace IngameScript
                 return;
             }
             更新计数器 = (更新计数器 + 1) % int.MaxValue;
-            if (!控制器.IsFunctional || 更新计数器 % 参数们.方块更新间隔 == 0)
+
+            bool 导弹存活 = !(控制器.GetPosition() == Vector3D.Zero) || 控制器.IsFunctional;
+            if (!导弹存活 || 更新计数器 % 参数们.方块更新间隔 == 0)
             {
                 已经初始化 = 初始化硬件();
             }
+            if (!导弹存活) 导弹状态信息.当前状态 = 导弹状态机.待机状态;
             // 获取目标位置
             Vector3D 当前目标位置 = 从飞行块获取目标();
             // 更新目标状态
@@ -245,7 +248,7 @@ namespace IngameScript
                             导弹状态信息.当前状态 != 导弹状态机.引爆激发 && 导弹状态信息.当前状态 != 导弹状态机.引爆最终;
             导弹状态信息.上次状态 = 导弹状态信息.当前状态;
             Echo($"存在目标：{有有效目标}, 位置更新：{目标位置已改变}");
-
+            控制器.Update();
 
 
             // 处理测试命令 - 进入测试状态
@@ -639,7 +642,8 @@ namespace IngameScript
                 控制器 = new ShipControllerAdapter(控制器列表[0]);
             else
             {
-                控制器 = new BlockMotionTracker(Me, 参数们.动力系统更新间隔 * (1.0 / 60.0), Echo);
+                // 控制器 = new BlockMotionTracker(Me, 参数们.动力系统更新间隔 * (1.0 / 60.0), Echo);
+                控制器 = new BlockMotionTracker(Me, (1.0 / 60.0), Echo);
                 // 如果没有找到控制器，尝试从组中寻找名称包含代理控制器前缀的Terminal方块
                 List<IMyTerminalBlock> 代理控制器列表 = new List<IMyTerminalBlock>();
                 方块组.GetBlocks(代理控制器列表);
@@ -647,7 +651,8 @@ namespace IngameScript
                 {
                     if (代理控制器.CustomName.Contains(参数们.代理控制器前缀))
                     {
-                        控制器 = new BlockMotionTracker(代理控制器, 参数们.动力系统更新间隔 * (1.0 / 60.0), Echo);
+                        // 控制器 = new BlockMotionTracker(代理控制器, 参数们.动力系统更新间隔 * (1.0 / 60.0), Echo);
+                        控制器 = new BlockMotionTracker(代理控制器, (1.0 / 60.0), Echo);
                         break;
                     }
                 }
@@ -991,15 +996,18 @@ namespace IngameScript
             Vector3D 视线角速度 = Vector3D.Cross(导弹到目标, 相对速度) /
                                 Math.Max(导弹到目标.LengthSquared(), 参数们.最小向量长度);
 
-            // ----- 步骤2.5 更新导弹上次状态 -----
-            // 更新上帧视线角速度，计算视线角加速度
+            // ----- 步骤2.5 计算加速度（使用上帧数据） -----
+            // 计算视线角加速度
             Vector3D 视线角加速度 = (视线角速度 - 导弹状态信息.上帧视线角速度) /
                                 (当前时间戳ms - 导弹状态信息.上帧运动学信息.TimeStamp);
-            导弹状态信息.上帧视线角速度 = 视线角速度;
-            // 更新运动学信息和加速度
-            SimpleTargetInfo 导弹当前运动学信息 = new SimpleTargetInfo(控制器.GetPosition(), 控制器.GetShipVelocities().LinearVelocity, 当前时间戳ms);
+            视线角加速度 *= 1000;
+            // 计算导弹加速度
+            SimpleTargetInfo 导弹当前运动学信息 = new SimpleTargetInfo(导弹位置, 导弹速度, 当前时间戳ms);
             导弹状态信息.当前加速度 = (导弹当前运动学信息.Velocity - 导弹状态信息.上帧运动学信息.Velocity) /
                                 (导弹当前运动学信息.TimeStamp - 导弹状态信息.上帧运动学信息.TimeStamp);
+            导弹状态信息.当前加速度 *= 1000; // 转换为 m/s²
+            // 更新上帧数据（为下一帧准备）
+            导弹状态信息.上帧视线角速度 = 视线角速度;
             导弹状态信息.上帧运动学信息 = 导弹当前运动学信息;
 
             // ----- 步骤3: 计算标准比例导航加速度 -----
@@ -1024,14 +1032,14 @@ namespace IngameScript
             比例导航加速度 += 微分补偿项;
 
             // ----- 步骤5: 添加积分补偿项 -----
-            Vector3D 补偿项方向;
-            double 模平方 = 视线角速度.LengthSquared();
-            if (模平方 > 参数们.最小向量长度) // 角速度判0
-                补偿项方向 = 视线角速度 / Math.Sqrt(模平方);
-            else
-                补偿项方向 = Vector3D.Zero;
-            Vector3D 积分补偿项 = 比例导航加速度稳态补偿项(目标信息.Value, 补偿项方向);
-            比例导航加速度 += 积分补偿项;
+            // Vector3D 补偿项方向;
+            // double 模平方 = 视线角速度.LengthSquared();
+            // if (模平方 > 参数们.最小向量长度) // 角速度判0
+            //     补偿项方向 = 视线角速度 / Math.Sqrt(模平方);
+            // else
+            //     补偿项方向 = Vector3D.Zero;
+            // Vector3D 积分补偿项 = 比例导航加速度稳态补偿项(目标信息.Value, 补偿项方向);
+            // 比例导航加速度 += 积分补偿项;
 
             // ----- 步骤6: 可选的攻击角度约束 -----
             if (参数们.启用攻击角度约束)
@@ -1053,44 +1061,47 @@ namespace IngameScript
             }
 
             // 更新诊断信息
-            比例导航诊断信息.Clear();
-            比例导航诊断信息.AppendLine($"[比例导航] 目标最大过载: {目标跟踪器.maxTargetAcceleration:n1}");
-            比例导航诊断信息.AppendLine($"[比例导航] 补偿项：{积分补偿项.Length():n1} m/s²");
+            比例导航诊断信息.Clear();       
+            比例导航诊断信息.AppendLine($"[比例导航] 导弹加速度: {导弹状态信息.当前加速度.Length():n2} m/s²");
+            比例导航诊断信息.AppendLine($"[比例导航] 导航常数: {导弹状态信息.导航常数:n1}");
+            比例导航诊断信息.AppendLine($"[比例导航] 微分补偿项：{微分补偿项.Length():n1} m/s²");
+            比例导航诊断信息.AppendLine($"[比例导航] 目标最大过载: {目标跟踪器.maxTargetAcceleration:n1}");   
+            // 比例导航诊断信息.AppendLine($"[比例导航] 积分补偿项：{积分补偿项.Length():n1} m/s²");
             比例导航诊断信息.AppendLine($"[比例导航] 目标距离: {距离:n1} m");
-            比例导航诊断信息.AppendLine($"[比例导航] 当前加速度命令: {最终加速度命令.Length():n1} m/s²");
 
             return 最终加速度命令;
         }
 
+        // /// <summary>
+        // /// 比例导航制导算法加速度补偿，或可视为一种积分补偿
+        // /// https://doi.org/10.3390/aerospace8080231
+        // /// </summary>
+        // /// <param name="目标信息">目标信息</param>
+        // /// <param name="补偿方向单位向量">视线角速度的单位向量</param>
+        // /// <returns>制导加速度补偿命令(世界坐标系)</returns>
+        // private Vector3D 比例导航加速度稳态补偿项(SimpleTargetInfo 目标信息, Vector3D 补偿方向单位向量)
+        // {
+        //     double 目标速度模长 = 目标信息.Velocity.Length(); // 目标速度模长
+        //     double 导弹速度模长 = 控制器.GetShipVelocities().LinearVelocity.Length(); // 导弹速度模长
+        //     // 获取目标最大加速度 (标量)
+        //     double 目标最大加速度 = 目标跟踪器.maxTargetAcceleration; // a_{T,max}
+
+        //     // 计算速度比 (标量)
+        //     double 速度比 = 目标速度模长 > 0.1 ? 导弹速度模长 / 目标速度模长 : 1.0; // ν
+
+        //     // 计算 C2 常数 (标量)
+        //     double C2 = 0;
+        //     if (速度比 > 0.9528) // 只有当导弹速度近似大于目标速度时才应用(101 / 106 ≈ 0.9528)
+        //     {
+        //         double 根号项 = Math.Sqrt(Math.Max(0, 1.0 - 1.0 / (速度比 * 速度比)));
+        //         C2 = 目标最大加速度 * 根号项;
+        //     }
+        //     C2 = Math.Min(C2, 导弹状态信息.导弹世界主过载.Length()); // 限制最大加速度
+        //     return C2 * 补偿方向单位向量; // 返回补偿项            
+        // }
+
         /// <summary>
-        /// 比例导航制导算法加速度补偿，或可视为一种积分补偿
-        /// https://doi.org/10.3390/aerospace8080231
-        /// </summary>
-        /// <param name="目标信息">目标信息</param>
-        /// <param name="补偿方向单位向量">视线角速度的单位向量</param>
-        /// <returns>制导加速度补偿命令(世界坐标系)</returns>
-        private Vector3D 比例导航加速度稳态补偿项(SimpleTargetInfo 目标信息, Vector3D 补偿方向单位向量)
-        {
-            double 目标速度模长 = 目标信息.Velocity.Length(); // 目标速度模长
-            double 导弹速度模长 = 控制器.GetShipVelocities().LinearVelocity.Length(); // 导弹速度模长
-            // 获取目标最大加速度 (标量)
-            double 目标最大加速度 = 目标跟踪器.maxTargetAcceleration; // a_{T,max}
-
-            // 计算速度比 (标量)
-            double 速度比 = 目标速度模长 > 0.1 ? 导弹速度模长 / 目标速度模长 : 1.0; // ν
-
-            // 计算 C2 常数 (标量)
-            double C2 = 0;
-            if (速度比 > 0.9528) // 只有当导弹速度近似大于目标速度时才应用(101 / 106 ≈ 0.9528)
-            {
-                double 根号项 = Math.Sqrt(Math.Max(0, 1.0 - 1.0 / (速度比 * 速度比)));
-                C2 = 目标最大加速度 * 根号项;
-            }
-            return C2 * 补偿方向单位向量; // 返回补偿项            
-        }
-
-        /// <summary>
-        /// 计算 TAPN 补偿项（K = 0.5 * N）
+        /// 计算 TAPN 补偿项（K = 0.1 * N）
         /// a_tapn = K * ( 0.5 * R * (λ_ddot × l̂) + a_M,perp )
         /// Augmented proportional navigation guidance law using angular acceleration measurements
         /// https://patents.google.com/patent/US7446291B1/en by LOCKHEED MARTIN CORPORATION
@@ -1107,8 +1118,8 @@ namespace IngameScript
             if (距离 < 参数们.最小向量长度 || 导航常数N <= 0)
                 return Vector3D.Zero;
 
-            // 2) K = 0.5 * N
-            double K = 0.5 * 导航常数N;
+            // 2) K = 0.1 * N，magic number
+            double K = 0.1 * 导航常数N;
 
             // 3) 计算导弹在 LOS 垂直方向的加速度分量 a_M,perp
             Vector3D aM_parallel = Vector3D.Dot(导弹当前线加速度, 视线单位向量) * 视线单位向量;
@@ -1330,7 +1341,6 @@ namespace IngameScript
             // 仅在指定更新间隔执行，减少过度控制
             if (更新计数器 % 参数们.动力系统更新间隔 != 0)
                 return;
-            控制器.Update();
             // ----------------- 外环：角度误差 → 期望角速度 (世界坐标系) -----------------
             // 使用PD控制器将角度误差转换为期望角速度
             Vector3D 期望角速度PYR = 外环PID控制器PYR.GetOutput(目标角度PYR);
@@ -1830,8 +1840,6 @@ namespace IngameScript
             {
                 // 如果是BlockMotionTracker，显示警告信息
                 Echo($"无控警告: {控制器.CustomName}");
-                Echo($"有功能: {控制器.IsFunctional}");
-                Echo($"被移除: {控制器.Closed}");
             }
             // 清空并重新构建性能统计信息
             性能统计信息.Clear();

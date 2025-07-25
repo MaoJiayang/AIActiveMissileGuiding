@@ -83,7 +83,7 @@ namespace IngameScript
         public StringBuilder 获取导弹诊断信息()
         {
             导弹状态信息.Clear();
-            导弹状态信息.AppendLine($"[导弹状态] 当前状态: {当前状态转文字()}");
+            // 导弹状态信息.AppendLine($"[导弹状态] 当前状态: {当前状态转文字()}");
             导弹状态信息.AppendLine($"[导弹状态] 导航常数: {导航常数:F2}");
             导弹状态信息.AppendLine($"[导弹状态] 可用过载: {导弹世界主过载.Length():F2}");
             导弹状态信息.AppendLine($"[导弹状态] 需用过载: {制导命令.Length():F2}");

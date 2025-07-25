@@ -44,7 +44,7 @@ namespace IngameScript
         /// <summary>
         /// 导航常数最大值
         /// </summary>
-        public double 导航常数最大值 { get; set; } = 15;
+        public double 导航常数最大值 { get; set; } = 5;
         /// <summary>
         /// 是否启用攻击角度约束
         /// </summary>

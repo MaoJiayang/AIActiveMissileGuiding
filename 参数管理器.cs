@@ -64,7 +64,26 @@ namespace IngameScript
         /// 接近引爆距离阈值(米)
         /// </summary>
         public double 引爆距离阈值 { get; set; } = 5.0;
-        public bool 手动保险超控 { get; set; } = false; // 手动保险超控，允许在任何状态下引爆
+
+        /// <summary>
+        /// 碰炸解锁距离(米)
+        /// 大于此距离不允许碰炸
+        /// </summary>
+        public double 碰炸解锁距离 { get; set; } = 150.0;
+
+        /// <summary>
+        /// 碰炸迟缓度
+        /// 如果导弹的当前加速度
+        /// 超过自己能提供的sqrt(迟缓度)倍
+        /// 则会触发碰炸
+        /// </summary>
+        public double 碰炸迟缓度 { get; set; } = 4;
+
+        /// <summary>
+        /// 手动保险超控
+        /// 如果为true，则导弹可以在任何状态下引爆
+        /// </summary>
+        public bool 手动保险超控 { get; set; } = false;
 
         #endregion
 
@@ -398,6 +417,12 @@ namespace IngameScript
                     case "手动保险超控":
                         手动保险超控 = bool.Parse(参数值);
                         break;
+                    case "碰炸解锁距离":
+                        碰炸解锁距离 = double.Parse(参数值);
+                        break;
+                    case "碰炸迟缓度":
+                        碰炸迟缓度 = double.Parse(参数值);
+                        break;
                 }
             }
             catch (Exception)
@@ -429,6 +454,8 @@ namespace IngameScript
             配置.AppendLine();
             配置.AppendLine("// 引爆相关参数");
             配置.AppendLine($"引爆距离阈值={引爆距离阈值}");
+            配置.AppendLine($"碰炸解锁距离={碰炸解锁距离}");
+            配置.AppendLine($"碰炸迟缓度={碰炸迟缓度}");
             配置.AppendLine($"手动保险超控={手动保险超控}"); // 手动保险超控，允许在任何状态下引爆
             配置.AppendLine();
             配置.AppendLine("// 热发射阶段相关参数");

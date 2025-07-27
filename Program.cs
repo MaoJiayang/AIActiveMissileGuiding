@@ -295,9 +295,7 @@ namespace IngameScript
             {
                 bool 传感器触发 = 检查传感器触发();
                 bool 距离触发 = 检查距离触发();
-
-                bool 碰撞触发 = 控制器.GetAcceleration().LengthSquared() - 9.8 >
-                                4 * 导弹状态信息.导弹世界主过载.LengthSquared();
+                bool 碰撞触发 = 检查碰撞触发();
 
                 if (传感器触发 || 距离触发 || 碰撞触发)
                 {
@@ -697,6 +695,8 @@ namespace IngameScript
             if (初始化完整)
             {
                 分类推进器(控制器);
+                Vector3D 虚构目标位置 = 控制器.GetPosition() + 控制器.WorldMatrix.Forward * 1000;
+                计算接近加速度并重力补偿(虚构目标位置, 虚构目标位置, 控制器);// 无意义，只是为了获取导弹的最大可能加速度
             }
             else
             {
@@ -1140,6 +1140,7 @@ namespace IngameScript
 
         /// <summary>
         /// 计算接近加速度并执行重力补偿后处理
+        /// 同时这里也会更新导弹的最大过载
         /// </summary>
         /// <param name="视线">导弹到目标的视线向量</param>
         /// <param name="比例导航加速度">比例导航计算的加速度</param>
@@ -1772,7 +1773,22 @@ namespace IngameScript
 
             return 距离 <= 参数们.引爆距离阈值;
         }
+        private bool 检查碰撞触发()
+        {
+            if (!引爆系统可用 || 控制器 == null) return false;
 
+            bool 加速度触发 = 控制器.GetAcceleration().LengthSquared() >
+                            参数们.碰炸迟缓度 * 导弹状态信息.导弹世界主过载.LengthSquared();
+            if (!加速度触发) return false; 
+
+            // 检查上次目标位置是否有效
+            if (导弹状态信息.上次预测目标位置.Equals(Vector3D.Zero)) return false;
+            Vector3D 当前位置 = 控制器.GetPosition();
+            double 距离 = Vector3D.Distance(当前位置, 导弹状态信息.上次预测目标位置);
+            if(距离 > 参数们.碰炸解锁距离) return false;
+
+            return  true;
+        }
         /// <summary>
         /// 处理引爆激发状态
         /// </summary>

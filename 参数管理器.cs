@@ -1,5 +1,6 @@
 using System;
 using VRage.Game.ModAPI.Ingame;
+using Sandbox.ModAPI.Ingame;
 using VRageMath;
 
 namespace IngameScript
@@ -8,9 +9,8 @@ namespace IngameScript
     /// 导弹参数管理器 - 统一管理所有超参数
     /// </summary>
     public class 参数管理器
-    {
+    {  
         #region 制导相关参数
-
         /// <summary>
         /// 向量最小有效长度
         /// </summary>
@@ -19,7 +19,7 @@ namespace IngameScript
         /// <summary>
         /// 最小接近加速度(m/s)
         /// </summary>
-        public double 最小接近加速度 { get; set; } = 2.5;
+        public double 最小接近加速度 { get; set; } = 9.8;
 
         /// <summary>
         /// 时间常数(秒)
@@ -44,7 +44,7 @@ namespace IngameScript
         /// <summary>
         /// 导航常数最大值
         /// </summary>
-        public double 导航常数最大值 { get; set; } = 15;
+        public double 导航常数最大值 { get; set; } = 5;
         /// <summary>
         /// 是否启用攻击角度约束
         /// </summary>
@@ -64,6 +64,26 @@ namespace IngameScript
         /// 接近引爆距离阈值(米)
         /// </summary>
         public double 引爆距离阈值 { get; set; } = 5.0;
+
+        /// <summary>
+        /// 碰炸解锁距离(米)
+        /// 大于此距离不允许碰炸
+        /// </summary>
+        public double 碰炸解锁距离 { get; set; } = 150.0;
+
+        /// <summary>
+        /// 碰炸迟缓度
+        /// 如果导弹的当前加速度
+        /// 超过自己能提供的sqrt(迟缓度)倍
+        /// 则会触发碰炸
+        /// </summary>
+        public double 碰炸迟缓度 { get; set; } = 4;
+
+        /// <summary>
+        /// 手动保险超控
+        /// 如果为true，则导弹可以在任何状态下引爆
+        /// </summary>
+        public bool 手动保险超控 { get; set; } = false;
 
         #endregion
 
@@ -86,7 +106,7 @@ namespace IngameScript
         /// <summary>
         /// 陀螺仪(现在是动力系统）更新间隔(ticks)
         /// </summary>
-        public int 陀螺仪更新间隔 { get; set; } = 5;
+        public int 动力系统更新间隔 { get; set; } = 5;
 
         /// <summary>
         /// 推进器重新分类间隔(ticks)
@@ -214,9 +234,16 @@ namespace IngameScript
         /// <summary>
         /// 默认构造函数，使用默认参数
         /// </summary>
-        public 参数管理器()
+        public 参数管理器(IMyTerminalBlock block)
         {
-            // 所有参数已在属性声明时设置默认值
+            // 初始化参数管理器（可以从Me.CustomData读取配置）
+            string 自定义数据 = block.CustomData;
+            if (!string.IsNullOrWhiteSpace(自定义数据))
+            {
+                解析配置字符串(自定义数据);
+                block.CustomData = 生成配置字符串();
+            }
+            else block.CustomData = 生成配置字符串();
         }
 
         /// <summary>
@@ -237,7 +264,7 @@ namespace IngameScript
         /// </summary>
         public double 获取PID时间常数()
         {
-            return 时间常数 * 陀螺仪更新间隔;
+            return 时间常数 * 动力系统更新间隔;
         }
 
         /// <summary>
@@ -332,7 +359,7 @@ namespace IngameScript
                         分离推进器名称 = 参数值;
                         break;
                     case "陀螺仪更新间隔":
-                        陀螺仪更新间隔 = int.Parse(参数值);
+                        动力系统更新间隔 = int.Parse(参数值);
                         break;
                     case "推进器重新分类间隔":
                         推进器重新分类间隔 = int.Parse(参数值);
@@ -387,6 +414,15 @@ namespace IngameScript
                     case "代理控制器前缀":
                         代理控制器前缀 = 参数值;
                         break;
+                    case "手动保险超控":
+                        手动保险超控 = bool.Parse(参数值);
+                        break;
+                    case "碰炸解锁距离":
+                        碰炸解锁距离 = double.Parse(参数值);
+                        break;
+                    case "碰炸迟缓度":
+                        碰炸迟缓度 = double.Parse(参数值);
+                        break;
                 }
             }
             catch (Exception)
@@ -418,13 +454,16 @@ namespace IngameScript
             配置.AppendLine();
             配置.AppendLine("// 引爆相关参数");
             配置.AppendLine($"引爆距离阈值={引爆距离阈值}");
+            配置.AppendLine($"碰炸解锁距离={碰炸解锁距离}");
+            配置.AppendLine($"碰炸迟缓度={碰炸迟缓度}");
+            配置.AppendLine($"手动保险超控={手动保险超控}"); // 手动保险超控，允许在任何状态下引爆
             配置.AppendLine();
             配置.AppendLine("// 热发射阶段相关参数");
             配置.AppendLine($"热发射持续帧数={热发射持续帧数}");
             配置.AppendLine($"分离推进器名称={分离推进器名称}");
             配置.AppendLine();
             配置.AppendLine("// 状态切换时间参数");
-            配置.AppendLine($"陀螺仪更新间隔={陀螺仪更新间隔}");
+            配置.AppendLine($"陀螺仪更新间隔={动力系统更新间隔}");
             配置.AppendLine($"推进器重新分类间隔={推进器重新分类间隔}");
             配置.AppendLine($"目标位置不变最大帧数={目标位置不变最大帧数}");
             配置.AppendLine($"预测制导持续帧数={预测制导持续帧数}");

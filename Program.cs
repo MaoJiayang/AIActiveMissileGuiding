@@ -293,8 +293,8 @@ namespace IngameScript
             {
                 bool 传感器触发 = 检查传感器触发();
                 bool 距离触发 = 检查距离触发();
-                bool 惯性触发 = 导弹状态信息.当前加速度.LengthSquared() > 4 * 导弹状态信息.导弹世界主过载.LengthSquared();
-                if (传感器触发 || 距离触发 || 惯性触发)
+                bool 碰撞触发 = 导弹状态信息.当前加速度.LengthSquared() > 4 * 导弹状态信息.导弹世界主过载.LengthSquared();
+                if (传感器触发 || 距离触发 || 碰撞触发)
                 {
                     导弹状态信息.当前状态 = 导弹状态机.引爆激发;
                     return;

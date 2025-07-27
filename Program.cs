@@ -7,6 +7,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using VRage;
 using VRage.Collections;
@@ -575,6 +576,8 @@ namespace IngameScript
                 // 目标信息 = 目标跟踪器.PredictFutureTargetInfo(拦截时间);
 
                 Vector3D 制导命令 = 比例导航制导(控制器, 目标信息);
+                导弹状态信息.制导命令 = 制导命令;
+                导弹状态信息.上次预测目标位置 = 目标位置;
                 应用制导命令(制导命令, 控制器);
             }
         }
@@ -595,6 +598,7 @@ namespace IngameScript
                     long 预测时间毫秒 = (long)Math.Round((更新计数器 - 上次目标更新时间) * 参数们.时间常数 * 1000);
                     SimpleTargetInfo 预测目标 = 目标跟踪器.PredictFutureTargetInfo(预测时间毫秒);
                     导弹状态信息.制导命令 = 比例导航制导(控制器, 预测目标);
+                    导弹状态信息.上次预测目标位置 = 预测目标.Position;
                 }
                 应用制导命令(导弹状态信息.制导命令, 控制器);
             }
@@ -1762,10 +1766,10 @@ namespace IngameScript
             if (!引爆系统可用 || 控制器 == null) return false;
 
             // 检查上次目标位置是否有效
-            if (导弹状态信息.上次真实目标位置.Equals(Vector3D.Zero)) return false;
+            if (导弹状态信息.上次预测目标位置.Equals(Vector3D.Zero)) return false;
 
             Vector3D 当前位置 = 控制器.GetPosition();
-            double 距离 = Vector3D.Distance(当前位置, 导弹状态信息.上次真实目标位置);
+            double 距离 = Vector3D.Distance(当前位置, 导弹状态信息.上次预测目标位置);
 
             return 距离 <= 参数们.引爆距离阈值;
         }

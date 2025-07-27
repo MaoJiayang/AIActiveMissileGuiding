@@ -56,6 +56,7 @@ namespace IngameScript
         public Vector3D 上帧视线角速度;
         public Vector3D 制导命令;
         public Vector3D 导弹世界主过载;
+        public Vector3D 上次预测目标位置; // 更新的“每帧”目标位置
         public double 导航常数;
         public bool 等待二阶段引爆;
         private StringBuilder 导弹状态信息;
@@ -78,6 +79,7 @@ namespace IngameScript
             陀螺仪最高转速 = 2 * Math.PI;
             导弹状态信息 = new StringBuilder();
             上帧视线角速度 = Vector3D.Zero;
+            上次预测目标位置 = Vector3D.Zero;
         }
 
         public StringBuilder 获取导弹诊断信息()

@@ -1,5 +1,6 @@
 using System;
 using VRage.Game.ModAPI.Ingame;
+using Sandbox.ModAPI.Ingame;
 using VRageMath;
 
 namespace IngameScript
@@ -8,9 +9,8 @@ namespace IngameScript
     /// 导弹参数管理器 - 统一管理所有超参数
     /// </summary>
     public class 参数管理器
-    {
+    {  
         #region 制导相关参数
-
         /// <summary>
         /// 向量最小有效长度
         /// </summary>
@@ -64,6 +64,7 @@ namespace IngameScript
         /// 接近引爆距离阈值(米)
         /// </summary>
         public double 引爆距离阈值 { get; set; } = 5.0;
+        public bool 手动保险超控 { get; set; } = false; // 手动保险超控，允许在任何状态下引爆
 
         #endregion
 
@@ -214,9 +215,16 @@ namespace IngameScript
         /// <summary>
         /// 默认构造函数，使用默认参数
         /// </summary>
-        public 参数管理器()
+        public 参数管理器(IMyTerminalBlock block)
         {
-            // 所有参数已在属性声明时设置默认值
+            // 初始化参数管理器（可以从Me.CustomData读取配置）
+            string 自定义数据 = block.CustomData;
+            if (!string.IsNullOrWhiteSpace(自定义数据))
+            {
+                解析配置字符串(自定义数据);
+                block.CustomData = 生成配置字符串();
+            }
+            else block.CustomData = 生成配置字符串();
         }
 
         /// <summary>
@@ -387,6 +395,9 @@ namespace IngameScript
                     case "代理控制器前缀":
                         代理控制器前缀 = 参数值;
                         break;
+                    case "手动保险超控":
+                        手动保险超控 = bool.Parse(参数值);
+                        break;
                 }
             }
             catch (Exception)
@@ -418,6 +429,7 @@ namespace IngameScript
             配置.AppendLine();
             配置.AppendLine("// 引爆相关参数");
             配置.AppendLine($"引爆距离阈值={引爆距离阈值}");
+            配置.AppendLine($"手动保险超控={手动保险超控}"); // 手动保险超控，允许在任何状态下引爆
             配置.AppendLine();
             配置.AppendLine("// 热发射阶段相关参数");
             配置.AppendLine($"热发射持续帧数={热发射持续帧数}");

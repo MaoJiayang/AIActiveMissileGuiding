@@ -45,14 +45,13 @@ namespace IngameScript
         public 导弹状态机 当前状态;
         public 导弹状态机 上次状态;
         public Vector3D 上次真实目标位置;// AI块的“每帧”
-        public Vector3D 当前加速度;
         public bool 角度误差在容忍范围内; 
 
         // 只更新一次
         public double 陀螺仪最高转速;
 
         // 计算密集型，每隔一段时间（动力系统更新间隔）更新或按需更新
-        public SimpleTargetInfo 上帧运动学信息;
+        public long 上次更新时间戳ms;
         public Vector3D 上帧视线角速度;
         public Vector3D 制导命令;
         public Vector3D 导弹世界主过载;
@@ -68,8 +67,6 @@ namespace IngameScript
         {
             当前状态 = 导弹状态机.待机状态;
             上次状态 = 导弹状态机.待机状态;
-            上帧运动学信息 = new SimpleTargetInfo(Vector3D.Zero, Vector3D.Zero, 0);
-            当前加速度 = Vector3D.Zero;
             上次真实目标位置 = Vector3D.Zero;
             制导命令 = Vector3D.Zero;
             导弹世界主过载 = Vector3D.Zero;

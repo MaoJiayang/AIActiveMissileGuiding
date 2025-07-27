@@ -71,6 +71,12 @@ namespace IngameScript
         Vector3D GetPosition();
 
         /// <summary>
+        /// 获取飞船或方块的加速度
+        /// </summary>
+        /// <returns>加速度向量（Vector3D）。</returns>
+        Vector3D GetAcceleration();
+
+        /// <summary>
         /// 控制器或方块的自定义名称。
         /// </summary>
         string CustomName { get; }
@@ -98,9 +104,11 @@ namespace IngameScript
     {
         private IMyTerminalBlock block;
         private double updateIntervalSeconds;
-        private MatrixD lastWorldMatrix;
+        private MatrixD LastWorldMatrix;
+        private Vector3D LastLinearVelocity;
         private Vector3D LinearVelocity;
         private Vector3D AngularVelocity;
+        private Vector3D LinearAcceleration;
         private Action<string> Echo;
         private MyShipMass _缓存质量 = new MyShipMass(-1, -1, -1);
         public string CustomName { get { return block.CustomName; } }
@@ -110,7 +118,9 @@ namespace IngameScript
         {
             this.block = block;
             this.updateIntervalSeconds = Math.Max(1e-6, updateIntervalSeconds);
-            this.lastWorldMatrix = block.WorldMatrix;
+            this.LastWorldMatrix = block.WorldMatrix;
+            this.LastLinearVelocity = block.CubeGrid.LinearVelocity;
+            this.LinearVelocity = block.CubeGrid.LinearVelocity;
             this.AngularVelocity = Vector3D.Zero;
             this.Echo = Echo ?? (msg => { }); // 默认空实现，避免空引用异常
         }
@@ -120,25 +130,8 @@ namespace IngameScript
         /// </summary>
         public void Update()
         {
-            MatrixD currentWorldMatrix = block.WorldMatrix;
-            MatrixD deltaRotation = MatrixD.Multiply(
-                currentWorldMatrix.GetOrientation(),
-                MatrixD.Transpose(lastWorldMatrix.GetOrientation())
-            );
-            lastWorldMatrix = currentWorldMatrix;
-            // ---
-            QuaternionD deltaQuat = QuaternionD.CreateFromRotationMatrix(deltaRotation);
-            Vector3D axis;
-            double angle;
-            deltaQuat.GetAxisAngle(out axis, out angle);
-            if (angle > Math.PI)
-                angle = (angle + Math.PI) % (2 * Math.PI) - Math.PI;
-            Vector3D localAngularVelocity = axis * (angle / updateIntervalSeconds);
-
-            // 转换到世界坐标系
-            Vector3D worldAngularVelocity = Vector3D.TransformNormal(localAngularVelocity, block.WorldMatrix);
-
-            AngularVelocity = worldAngularVelocity;         
+            UpdateAcceleration();
+            UpdateAngularVelocity();
         }
 
         public Vector3D GetNaturalGravity() { return Vector3D.Zero; }
@@ -175,19 +168,53 @@ namespace IngameScript
             return _缓存质量;
         }
         public Vector3D GetPosition() { return block.GetPosition(); }
+        public Vector3D GetAcceleration() { return LinearAcceleration; }
         public bool IsFunctional { get { return block.IsFunctional; } }
         public bool Closed { get { return block.Closed; } }
+
+        private void UpdateAcceleration()
+        {
+            // 计算线性加速度
+            Vector3D currentLinearVelocity = block.CubeGrid.LinearVelocity;
+            LinearAcceleration = (currentLinearVelocity - LastLinearVelocity) / updateIntervalSeconds;
+            LastLinearVelocity = currentLinearVelocity;
+        }
+        private void UpdateAngularVelocity()
+        {
+            MatrixD currentWorldMatrix = block.WorldMatrix;
+            MatrixD deltaRotation = MatrixD.Multiply(
+                currentWorldMatrix.GetOrientation(),
+                MatrixD.Transpose(LastWorldMatrix.GetOrientation())
+            );
+            LastWorldMatrix = currentWorldMatrix;
+            // ---
+            QuaternionD deltaQuat = QuaternionD.CreateFromRotationMatrix(deltaRotation);
+            Vector3D axis;
+            double angle;
+            deltaQuat.GetAxisAngle(out axis, out angle);
+            if (angle > Math.PI)
+                angle = (angle + Math.PI) % (2 * Math.PI) - Math.PI;
+            Vector3D localAngularVelocity = axis * (angle / updateIntervalSeconds);
+
+            // 转换到世界坐标系
+            Vector3D worldAngularVelocity = Vector3D.TransformNormal(localAngularVelocity, block.WorldMatrix);
+
+            AngularVelocity = worldAngularVelocity;
+        }
     }
 
     // 3. 控制器适配器
     public class ShipControllerAdapter : IMyControllerCompat
     {
         private IMyShipController ctrl;
-        public ShipControllerAdapter(IMyShipController ctrl) { this.ctrl = ctrl; }
+        private Vector3D LastLinearVelocity = Vector3D.Zero;
+        private Vector3D LinearAcceleration = Vector3D.Zero;
+        private double updateIntervalSeconds = 0.0166666667; // 默认更新间隔为60Hz
         public Vector3D GetNaturalGravity() { return ctrl.GetNaturalGravity(); }
         public Vector3D GetArtificialGravity() { return ctrl.GetArtificialGravity(); }
         public Vector3D GetTotalGravity() { return ctrl.GetTotalGravity(); }
         public double GetShipSpeed() { return ctrl.GetShipSpeed(); }
+        public Vector3D GetAcceleration() { return LinearAcceleration; }
         public MyShipVelocities GetShipVelocities() { return ctrl.GetShipVelocities(); }
         public MyShipMass CalculateShipMass() { return ctrl.CalculateShipMass(); }
         public Vector3D GetPosition() { return ctrl.GetPosition(); }
@@ -195,9 +222,23 @@ namespace IngameScript
         public MatrixD WorldMatrix { get { return ctrl.WorldMatrix; } }
         public bool IsFunctional { get { return ctrl.IsFunctional; } }
         public bool Closed { get { return ctrl.Closed; } }
+        public ShipControllerAdapter(IMyShipController ctrl, double updateIntervalSeconds = 0.0166666667)
+        {
+            this.ctrl = ctrl;
+            this.updateIntervalSeconds = updateIntervalSeconds;
+            this.LastLinearVelocity = ctrl.CubeGrid.LinearVelocity;
+        }
         public void Update()
         {
-            // IMyShipController 不需要手动更新位置和速度
+            // 更新位置和速度
+            UpdateAcceleration();
+        }
+        private void UpdateAcceleration()
+        {
+            // 计算线性加速度
+            Vector3D currentLinearVelocity = ctrl.CubeGrid.LinearVelocity;
+            LinearAcceleration = (currentLinearVelocity - LastLinearVelocity) / updateIntervalSeconds;
+            LastLinearVelocity = currentLinearVelocity;
         }
     }
 }

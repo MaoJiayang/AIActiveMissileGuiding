@@ -30,7 +30,7 @@ namespace IngameScript
     {
         #region 参数管理
         // 参数管理器实例
-        private 参数管理器 参数们 = new 参数管理器();
+        private 参数管理器 参数们;
 
         #endregion
 
@@ -124,14 +124,7 @@ namespace IngameScript
         {
             // 初始化导弹状态数据
             导弹状态信息 = new 导弹状态量();
-
-            // 初始化参数管理器（可以从Me.CustomData读取配置）
-            if (!string.IsNullOrWhiteSpace(Me.CustomData))
-            {
-                参数们 = new 参数管理器(Me.CustomData);
-            }
-            else Me.CustomData = 参数们.生成配置字符串();
-
+            参数们 = new 参数管理器(Me);
             // 初始化PID控制器
             初始化PID控制器();
 
@@ -248,11 +241,10 @@ namespace IngameScript
                             导弹状态信息.当前状态 != 导弹状态机.热发射阶段 &&
                             导弹状态信息.当前状态 != 导弹状态机.引爆激发 &&
                             导弹状态信息.当前状态 != 导弹状态机.引爆最终;
-            bool 控制器需更新 = 导弹保险解除 || 导弹状态信息.当前状态 == 导弹状态机.热发射阶段;
+            bool 控制器需更新 = 导弹保险解除 || 导弹状态信息.当前状态 == 导弹状态机.热发射阶段 || 参数们.手动保险超控;
             导弹状态信息.上次状态 = 导弹状态信息.当前状态;
             Echo($"存在目标：{有有效目标}, 位置更新：{目标位置已改变}");
             if (控制器需更新) 控制器.Update();
-
 
             // 处理测试命令 - 进入测试状态
             if (!string.IsNullOrEmpty(argument))
@@ -287,6 +279,11 @@ namespace IngameScript
                     热发射开始帧数 = 更新计数器;
                     return;
                 }
+                else if (argument.ToLower() == "arm")
+                {
+                    参数们.手动保险超控 = true;
+                    return;
+                }
             }
 
             // 检查引爆条件（传感器和距离触发）- 只在活跃状态检查
@@ -294,7 +291,10 @@ namespace IngameScript
             {
                 bool 传感器触发 = 检查传感器触发();
                 bool 距离触发 = 检查距离触发();
-                bool 碰撞触发 = 导弹状态信息.当前加速度.LengthSquared() > 4 * 导弹状态信息.导弹世界主过载.LengthSquared();
+
+                bool 碰撞触发 = 控制器.GetAcceleration().LengthSquared() - 9.8 >
+                                4 * 导弹状态信息.导弹世界主过载.LengthSquared();
+
                 if (传感器触发 || 距离触发 || 碰撞触发)
                 {
                     导弹状态信息.当前状态 = 导弹状态机.引爆激发;
@@ -644,7 +644,7 @@ namespace IngameScript
             方块组.GetBlocksOfType(控制器列表);
 
             if (控制器列表.Count > 0)
-                控制器 = new ShipControllerAdapter(控制器列表[0]);
+                控制器 = new ShipControllerAdapter(控制器列表[0], (1.0 / 60.0));
             else
             {
                 // 控制器 = new BlockMotionTracker(Me, 参数们.动力系统更新间隔 * (1.0 / 60.0), Echo);
@@ -663,7 +663,7 @@ namespace IngameScript
                 }
                 // 备注：如果在更新间隔之间旋转了超过2π，会导致估算角速度不准确（极端情况）
             }
-            导弹状态信息.上帧运动学信息 = new SimpleTargetInfo(控制器.GetPosition(), 控制器.GetShipVelocities().LinearVelocity, 当前时间戳ms);
+            导弹状态信息.上次更新时间戳ms = 当前时间戳ms;
             // 获取推进器
             推进器列表.Clear();
             方块组.GetBlocksOfType(推进器列表);
@@ -1004,17 +1004,12 @@ namespace IngameScript
             // ----- 步骤2.5 计算加速度（使用上帧数据） -----
             // 计算视线角加速度
             Vector3D 视线角加速度 = (视线角速度 - 导弹状态信息.上帧视线角速度) /
-                                (当前时间戳ms - 导弹状态信息.上帧运动学信息.TimeStamp);
+                                (当前时间戳ms - 导弹状态信息.上次更新时间戳ms);
             视线角加速度 *= 1000;
-            // 计算导弹加速度
-            SimpleTargetInfo 导弹当前运动学信息 = new SimpleTargetInfo(导弹位置, 导弹速度, 当前时间戳ms);
-            导弹状态信息.当前加速度 = (导弹当前运动学信息.Velocity - 导弹状态信息.上帧运动学信息.Velocity) /
-                                (导弹当前运动学信息.TimeStamp - 导弹状态信息.上帧运动学信息.TimeStamp);
-            导弹状态信息.当前加速度 *= 1000; // 转换为 m/s²
             // 更新上帧数据（为下一帧准备）
             导弹状态信息.上帧视线角速度 = 视线角速度;
-            导弹状态信息.上帧运动学信息 = 导弹当前运动学信息;
-
+            导弹状态信息.上次更新时间戳ms = 当前时间戳ms;
+            
             // ----- 步骤3: 计算标准比例导航加速度 -----
             Vector3D 导弹速度单位向量;
             if (导弹速度长度 < 参数们.最小向量长度)
@@ -1033,7 +1028,7 @@ namespace IngameScript
             // Vector3D 目标加速度 = 目标跟踪器.currentTargetAcceleration;
             // Vector3D 横向加速度 = Vector3D.Cross(视线单位向量, 目标加速度);
             // 比例导航加速度 += 横向加速度;
-            Vector3D 微分补偿项 = 计算增强比例导航加速度补偿(距离, 视线单位向量, 视线角加速度, 导弹状态信息.当前加速度, 导弹状态信息.导航常数);
+            Vector3D 微分补偿项 = 计算增强比例导航加速度补偿(距离, 视线单位向量, 视线角加速度, 控制器.GetAcceleration(), 导弹状态信息.导航常数);
             比例导航加速度 += 微分补偿项;
 
             // ----- 步骤5: 添加积分补偿项 -----
@@ -1067,7 +1062,7 @@ namespace IngameScript
 
             // 更新诊断信息
             比例导航诊断信息.Clear();       
-            比例导航诊断信息.AppendLine($"[比例导航] 导弹加速度: {导弹状态信息.当前加速度.Length():n2} m/s²");
+            比例导航诊断信息.AppendLine($"[比例导航] 导弹加速度: {控制器.GetAcceleration().Length():n2} m/s²");
             比例导航诊断信息.AppendLine($"[比例导航] 导航常数: {导弹状态信息.导航常数:n1}");
             比例导航诊断信息.AppendLine($"[比例导航] 微分补偿项：{微分补偿项.Length():n1} m/s²");
             比例导航诊断信息.AppendLine($"[比例导航] 目标最大过载: {目标跟踪器.maxTargetAcceleration:n1}");   

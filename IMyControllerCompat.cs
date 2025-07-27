@@ -125,6 +125,8 @@ namespace IngameScript
                 currentWorldMatrix.GetOrientation(),
                 MatrixD.Transpose(lastWorldMatrix.GetOrientation())
             );
+            lastWorldMatrix = currentWorldMatrix;
+            // ---
             QuaternionD deltaQuat = QuaternionD.CreateFromRotationMatrix(deltaRotation);
             Vector3D axis;
             double angle;
@@ -136,8 +138,7 @@ namespace IngameScript
             // 转换到世界坐标系
             Vector3D worldAngularVelocity = Vector3D.TransformNormal(localAngularVelocity, block.WorldMatrix);
 
-            AngularVelocity = worldAngularVelocity;
-            lastWorldMatrix = currentWorldMatrix;
+            AngularVelocity = worldAngularVelocity;         
         }
 
         public Vector3D GetNaturalGravity() { return Vector3D.Zero; }

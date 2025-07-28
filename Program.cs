@@ -111,7 +111,7 @@ namespace IngameScript
 
         private StringBuilder 性能统计信息 = new StringBuilder();
         private StringBuilder 比例导航诊断信息 = new StringBuilder();
-        private string 性能统计缓存 = string.Empty;
+        private string 打印信息缓存 = string.Empty;
         private double 总运行时间毫秒 = 0;
         private double 最大运行时间毫秒 = 0;
         private int 运行次数 = 0;
@@ -165,6 +165,7 @@ namespace IngameScript
 
         public void Main(string argument, UpdateType updateSource)
         {
+            Echo($"AI主动弹制导脚本 - 版本: {参数们.版本号}");
             // 初始化硬件（如果需要）
             if (!已经初始化)
             {
@@ -1859,7 +1860,7 @@ namespace IngameScript
             if (控制器 is BlockMotionTracker)
             {
                 // 如果是BlockMotionTracker，显示警告信息
-                Echo($"无控警告: {控制器.CustomName}");
+                Echo($"代替控制器: {控制器.CustomName}");
             }
             // 清空并重新构建性能统计信息
             性能统计信息.Clear();
@@ -1878,11 +1879,11 @@ namespace IngameScript
         {
             if (更新计数器 % 参数们.动力系统更新间隔 == 0)
             {
-                性能统计缓存 = 导弹状态信息.获取导弹诊断信息().ToString() + '\n' +
-                    比例导航诊断信息.ToString() + '\n' +
+                打印信息缓存 = 导弹状态信息.获取导弹诊断信息().ToString() +
+                    比例导航诊断信息.ToString() +
                     性能统计信息.ToString();
             }
-            Echo(性能统计缓存);
+            Echo(打印信息缓存);
         }
         #endregion
     }

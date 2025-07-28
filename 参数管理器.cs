@@ -10,6 +10,7 @@ namespace IngameScript
     /// </summary>
     public class 参数管理器
     {  
+        public string 版本号 { get; } = "1.0.0";
         #region 制导相关参数
         /// <summary>
         /// 向量最小有效长度
@@ -69,7 +70,7 @@ namespace IngameScript
         /// 碰炸解锁距离(米)
         /// 大于此距离不允许碰炸
         /// </summary>
-        public double 碰炸解锁距离 { get; set; } = 150.0;
+        public double 碰炸解锁距离 { get; set; } = 50.0;
 
         /// <summary>
         /// 碰炸迟缓度

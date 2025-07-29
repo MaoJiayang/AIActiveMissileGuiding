@@ -1006,7 +1006,7 @@ namespace IngameScript
             Vector3D 视线角速度 = Vector3D.Cross(导弹到目标, 相对速度) /
                                 Math.Max(导弹到目标.LengthSquared(), 参数们.最小向量长度);
 
-            // ----- 步骤2.5 计算加速度（使用上帧数据） -----
+            // ----- 步骤3 计算加速度（使用上帧数据） -----
             // 计算视线角加速度
             Vector3D 视线角加速度 = (视线角速度 - 导弹状态信息.上帧视线角速度) /
                                 (当前时间戳ms - 导弹状态信息.上次更新时间戳ms);
@@ -1015,7 +1015,7 @@ namespace IngameScript
             导弹状态信息.上帧视线角速度 = 视线角速度;
             导弹状态信息.上次更新时间戳ms = 当前时间戳ms;
 
-            // ----- 步骤3: 计算标准比例导航加速度 -----
+            // ----- 步骤4: 计算标准比例导航加速度 -----
             Vector3D 导弹速度单位向量;
             if (导弹速度长度 < 参数们.最小向量长度)
             {
@@ -1029,22 +1029,13 @@ namespace IngameScript
             double 相对速度大小 = 相对速度.Length();
             Vector3D 比例导航加速度 = 导弹状态信息.导航常数 * 相对速度大小 * Vector3D.Cross(视线角速度, 视线单位向量);
 
-            // ----- 步骤4: 添加微分补偿项 -----
+            // ----- 步骤5: 添加微分补偿项 -----
             // Vector3D 目标加速度 = 目标跟踪器.currentTargetAcceleration;
             // Vector3D 横向加速度 = Vector3D.Cross(视线单位向量, 目标加速度);
             // 比例导航加速度 += 横向加速度;
             Vector3D 微分补偿项 = 计算增强比例导航加速度补偿(距离, 视线单位向量, 视线角加速度, 控制器.GetAcceleration(), 导弹状态信息.导航常数);
             比例导航加速度 += 微分补偿项;
 
-            // ----- 步骤5: 添加积分补偿项 -----
-            // Vector3D 补偿项方向;
-            // double 模平方 = 视线角速度.LengthSquared();
-            // if (模平方 > 参数们.最小向量长度) // 角速度判0
-            //     补偿项方向 = 视线角速度 / Math.Sqrt(模平方);
-            // else
-            //     补偿项方向 = Vector3D.Zero;
-            // Vector3D 积分补偿项 = 比例导航加速度稳态补偿项(目标信息.Value, 补偿项方向);
-            // 比例导航加速度 += 积分补偿项;
 
             // ----- 步骤6: 可选的攻击角度约束 -----
             if (参数们.启用攻击角度约束)
@@ -1067,43 +1058,15 @@ namespace IngameScript
 
             // 更新诊断信息
             比例导航诊断信息.Clear();       
-            比例导航诊断信息.AppendLine($"[比例导航] 导弹加速度: {控制器.GetAcceleration().Length():n2} m/s²");
+            // 比例导航诊断信息.AppendLine($"[比例导航] 导弹加速度: {控制器.GetAcceleration().Length():n2} m/s²");
             比例导航诊断信息.AppendLine($"[比例导航] 导航常数: {导弹状态信息.导航常数:n1}");
-            比例导航诊断信息.AppendLine($"[比例导航] 微分补偿项：{微分补偿项.Length():n1} m/s²");
-            比例导航诊断信息.AppendLine($"[比例导航] 目标最大过载: {目标跟踪器.maxTargetAcceleration:n1}");   
+            比例导航诊断信息.AppendLine($"[比例导航] 目标最大过载: {目标跟踪器.maxTargetAcceleration:n1}");
             // 比例导航诊断信息.AppendLine($"[比例导航] 积分补偿项：{积分补偿项.Length():n1} m/s²");
+            // 比例导航诊断信息.AppendLine($"[比例导航] 微分补偿项：{微分补偿项.Length():n1} m/s²");
             比例导航诊断信息.AppendLine($"[比例导航] 目标距离: {距离:n1} m");
 
             return 最终加速度命令;
         }
-
-        // /// <summary>
-        // /// 比例导航制导算法加速度补偿，或可视为一种积分补偿
-        // /// https://doi.org/10.3390/aerospace8080231
-        // /// </summary>
-        // /// <param name="目标信息">目标信息</param>
-        // /// <param name="补偿方向单位向量">视线角速度的单位向量</param>
-        // /// <returns>制导加速度补偿命令(世界坐标系)</returns>
-        // private Vector3D 比例导航加速度稳态补偿项(SimpleTargetInfo 目标信息, Vector3D 补偿方向单位向量)
-        // {
-        //     double 目标速度模长 = 目标信息.Velocity.Length(); // 目标速度模长
-        //     double 导弹速度模长 = 控制器.GetShipVelocities().LinearVelocity.Length(); // 导弹速度模长
-        //     // 获取目标最大加速度 (标量)
-        //     double 目标最大加速度 = 目标跟踪器.maxTargetAcceleration; // a_{T,max}
-
-        //     // 计算速度比 (标量)
-        //     double 速度比 = 目标速度模长 > 0.1 ? 导弹速度模长 / 目标速度模长 : 1.0; // ν
-
-        //     // 计算 C2 常数 (标量)
-        //     double C2 = 0;
-        //     if (速度比 > 0.9528) // 只有当导弹速度近似大于目标速度时才应用(101 / 106 ≈ 0.9528)
-        //     {
-        //         double 根号项 = Math.Sqrt(Math.Max(0, 1.0 - 1.0 / (速度比 * 速度比)));
-        //         C2 = 目标最大加速度 * 根号项;
-        //     }
-        //     C2 = Math.Min(C2, 导弹状态信息.导弹世界主过载.Length()); // 限制最大加速度
-        //     return C2 * 补偿方向单位向量; // 返回补偿项            
-        // }
 
         /// <summary>
         /// 计算 TAPN 补偿项（K = 0.1 * N）

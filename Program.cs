@@ -1035,12 +1035,13 @@ namespace IngameScript
             // ----- 步骤5: 添加微分补偿项 -----
             // Vector3D 目标加速度 = 目标跟踪器.currentTargetAcceleration;
             // Vector3D 横向加速度 = Vector3D.Cross(视线单位向量, 目标加速度);
-            // 比例导航加速度 += 横向加速度;
-            if (距离 > 参数们.补偿项失效距离)
-            {
-                Vector3D 微分补偿项 = 计算增强比例导航加速度补偿(距离, 视线单位向量, 视线角加速度, 控制器.GetAcceleration(), 导弹状态信息.导航常数);
+            // 比例导航加速度 += 横向加速度;// 依赖目标加速度估算
+            
+            // if (距离 > 参数们.补偿项失效距离)
+            // {
+            Vector3D 微分补偿项 = 计算增强比例导航加速度补偿(距离, 视线单位向量, 视线角加速度, 控制器.GetAcceleration(), 导弹状态信息.导航常数);
                 比例导航加速度 += 微分补偿项;
-            }
+            // }
 
             // ----- 步骤6: 可选的攻击角度约束 -----
             if (参数们.启用攻击角度约束)
@@ -1120,8 +1121,10 @@ namespace IngameScript
             // ----- 步骤1: 将比例导航加速度投影到本地坐标系 -----
             double 飞船质量 = 控制器.CalculateShipMass().PhysicalMass;
             Vector3D 速度方向 = 控制器.GetShipVelocities().LinearVelocity + 参数们.最小向量长度;
-            Vector3D 推力计算方向 = Vector3D.TransformNormal(速度方向, MatrixD.Transpose(控制器.WorldMatrix));
+
+            // Vector3D 推力计算方向 = Vector3D.TransformNormal(速度方向, MatrixD.Transpose(控制器.WorldMatrix));
             // Vector3D 推力计算方向 = Vector3D.TransformNormal(比例导航加速度, MatrixD.Transpose(控制器.WorldMatrix));
+            Vector3D 推力计算方向 = Vector3D.TransformNormal(视线单位向量, MatrixD.Transpose(控制器.WorldMatrix));
 
             // ----- 步骤2: 根据符号确定对应轴向推进器，计算本地加速度向量 -----
             Vector3D 本地最大加速度向量 = Vector3D.Zero;
@@ -1199,7 +1202,11 @@ namespace IngameScript
             Vector3D 飞行方向单位向量 = Vector3D.Normalize(飞行方向加速度);
             double 外力平行分量大小 = Vector3D.Dot(外源扰动加速度, 飞行方向单位向量);
             Vector3D 外力平行分量 = 外力平行分量大小 * 飞行方向单位向量;
-            Vector3D 外力垂直分量 = (外源扰动加速度 - 外力平行分量).Normalized() * 参数们.最大外力干扰;
+            Vector3D 外力垂直分量 = 外源扰动加速度 - 外力平行分量;
+            if (外力垂直分量.LengthSquared() > 参数们.最大外力干扰 * 参数们.最大外力干扰)
+            {
+                外力垂直分量 = 外力垂直分量.Normalized() * 参数们.最大外力干扰;
+            }
             比例导航诊断信息.AppendLine($"[比例导航] 垂直干扰: {外力垂直分量.Length():n2} m/s²");
             // 只补偿垂直分量，保留平行分量（如重力助推）
             Vector3D 最终加速度命令 = 飞行方向加速度 - 外力垂直分量;
@@ -1647,6 +1654,15 @@ namespace IngameScript
                         需要更新目标 = true;
                     }
                 }
+                else if (argument == "testforward")
+                {
+                    // 测试前向控制
+                    if (控制器 != null)
+                    {
+                        测试目标位置 = 控制器.GetPosition() + 控制器.WorldMatrix.Forward * 1000;
+                        需要更新目标 = true;
+                    }
+                }
                 else if (argument == "testouter")
                 {
                     // 测试外源扰动方向
@@ -1684,8 +1700,8 @@ namespace IngameScript
                 Vector3D 最新目标位置 = 目标跟踪器.GetLatestPosition();
                 Vector3D 导弹位置 = 控制器.GetPosition();
                 Vector3D 到目标向量 = 最新目标位置 - 导弹位置;
-                // SimpleTargetInfo 假目标 = new SimpleTargetInfo(最新目标位置, Vector3D.Zero, 0);
-                // 比例导航制导(控制器, 假目标);
+                SimpleTargetInfo 假目标 = new SimpleTargetInfo(最新目标位置, Vector3D.Zero, 0);
+                比例导航制导(控制器, 假目标);
                 if (到目标向量.Length() > 参数们.最小向量长度)
                 {
                     Vector3D 目标角度 = 计算陀螺仪目标角度(到目标向量 * 10, 控制器);
@@ -1694,8 +1710,8 @@ namespace IngameScript
                     Echo($"加速与前向夹角: {Vector3D.Angle(控制器.WorldMatrix.Forward, 控制器.GetAcceleration()):n2}");
                     Echo($"运动学加速度: {控制器.GetAcceleration().Length():n2}");
                     Echo($"自身质量: {控制器.CalculateShipMass().PhysicalMass:n1} kg");
-                    Echo($"PID外环参数: P={参数们.外环参数.P系数}, I={参数们.外环参数.I系数}, D={参数们.外环参数.D系数}");
-                    Echo($"PID内环参数: P={参数们.内环参数.P系数}, I={参数们.内环参数.I系数}, D={参数们.内环参数.D系数}");
+                    // Echo($"PID外环参数: P={参数们.外环参数.P系数}, I={参数们.外环参数.I系数}, D={参数们.外环参数.D系数}");
+                    // Echo($"PID内环参数: P={参数们.内环参数.P系数}, I={参数们.内环参数.I系数}, D={参数们.内环参数.D系数}");
                 }
                 else
                 {

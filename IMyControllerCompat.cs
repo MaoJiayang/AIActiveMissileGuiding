@@ -111,6 +111,7 @@ namespace IngameScript
         private Vector3D LinearAcceleration;
         private Action<string> Echo;
         private MyShipMass _缓存质量 = new MyShipMass(-1, -1, -1);
+        private Vector3I 方块空间占用 = Vector3I.Zero;
         public string CustomName { get { return block.CustomName; } }
         public MatrixD WorldMatrix { get { return block.WorldMatrix; } }
 
@@ -141,12 +142,13 @@ namespace IngameScript
         public MyShipVelocities GetShipVelocities() { return new MyShipVelocities(block.CubeGrid.LinearVelocity, AngularVelocity); }
         public MyShipMass CalculateShipMass()
         {
-            // 如果缓存有效，直接返回
-            if (_缓存质量.PhysicalMass >= 0)
-                return _缓存质量;
             IMyCubeGrid grid = block.CubeGrid;
             Vector3I min = grid.Min;
             Vector3I max = grid.Max;
+            // 如果缓存有效，直接返回
+            if (_缓存质量.PhysicalMass >= 0 && 方块空间占用 == max - min)
+                return _缓存质量;
+
             float totalMass = 0f;
             var visited = new HashSet<IMySlimBlock>();
             for (int x = min.X; x <= max.X; x++)
@@ -165,6 +167,7 @@ namespace IngameScript
                         }
                     }
             _缓存质量 = new MyShipMass(totalMass, totalMass, totalMass);
+            方块空间占用 = max - min;
             return _缓存质量;
         }
         public Vector3D GetPosition() { return block.GetPosition(); }
@@ -194,6 +197,10 @@ namespace IngameScript
             deltaQuat.GetAxisAngle(out axis, out angle);
             if (angle > Math.PI)
                 angle = (angle + Math.PI) % (2 * Math.PI) - Math.PI;
+            if (Math.Abs(angle) < 1e-6) {
+                AngularVelocity = Vector3D.Zero;
+                return;
+            }
             Vector3D localAngularVelocity = axis * (angle / updateIntervalSeconds);
 
             // 转换到世界坐标系

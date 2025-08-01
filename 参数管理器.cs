@@ -46,16 +46,23 @@ namespace IngameScript
         /// 导航常数最大值
         /// </summary>
         public double 导航常数最大值 { get; set; } = 5;
+
         /// <summary>
         /// 是否启用攻击角度约束
         /// </summary>
         public bool 启用攻击角度约束 { get; set; } = true;
 
         /// <summary>
+        /// 允许参与制导量计算的最大外力干扰量(m/s^2)
+        /// 11.8约等于1.2g
+        /// </summary>
+        public double 最大外力干扰 { get; set; } = 11.8;
+
+        /// <summary>
         ///  补偿项失效距离(米)
         /// 当目标距离小于此值时，补偿项将不再生效
         /// </summary>
-        public double 补偿项失效距离 { get; set; } = 100.0;
+        public double 补偿项失效距离 { get; set; } = 50.0;
 
         #endregion
 

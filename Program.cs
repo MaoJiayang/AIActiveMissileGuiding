@@ -703,7 +703,8 @@ namespace IngameScript
             {
                 分类推进器(控制器);
                 Vector3D 虚构目标位置 = 控制器.GetPosition() + 控制器.WorldMatrix.Forward * 1000;
-                计算接近加速度并外力补偿(虚构目标位置, 虚构目标位置, 控制器);// 无意义，只是为了获取导弹的最大可能加速度
+                计算接近加速度并外力补偿(控制器.WorldMatrix.Forward * 1000, 虚构目标位置, 控制器);// 无意义，只是为了获取导弹的最大可能加速度
+                // throw new Exception("测试报错");
             }
             else
             {
@@ -1114,7 +1115,7 @@ namespace IngameScript
 
         /// <summary>
         /// 计算接近加速度并执行重力补偿后处理
-        /// 同时这里也会更新导弹的最大过载
+        /// 同时这里也会更新导弹的最大过载与导航常数
         /// </summary>
         /// <param name="视线">导弹到目标的视线向量</param>
         /// <param name="比例导航加速度">比例导航计算的加速度</param>
@@ -1123,104 +1124,92 @@ namespace IngameScript
         private Vector3D 计算接近加速度并外力补偿(Vector3D 视线, Vector3D 比例导航加速度, IMyControllerCompat 控制器)
         {
             Vector3D 视线单位向量 = Vector3D.Normalize(视线);
-            // ----- 步骤1: 将比例导航加速度投影到本地坐标系 -----
             double 飞船质量 = 控制器.CalculateShipMass().PhysicalMass;
-            Vector3D 速度方向 = 控制器.GetShipVelocities().LinearVelocity + 参数们.最小向量长度;
 
-            // Vector3D 推力计算方向 = Vector3D.TransformNormal(速度方向, MatrixD.Transpose(控制器.WorldMatrix));
-            Vector3D 推力计算方向 = Vector3D.TransformNormal(比例导航加速度, MatrixD.Transpose(控制器.WorldMatrix));
-            // Vector3D 推力计算方向 = Vector3D.TransformNormal(视线单位向量, MatrixD.Transpose(控制器.WorldMatrix));
-
-            // ----- 步骤2: 根据符号确定对应轴向推进器，计算本地加速度向量 -----
-            Vector3D 本地最大加速度向量 = Vector3D.Zero;
-
-            // 负方向，使用ZN推进器，加上负号
-            if (推力计算方向.Z < 0)
-            {
-                本地最大加速度向量.Z = -(轴向最大推力["ZN"] / 飞船质量);
-            }
-            else if (推进器方向组["ZP"].Count > 0 && 推力计算方向.Z > 0)
-            {
-                本地最大加速度向量.Z = (轴向最大推力["ZP"] / 飞船质量);
-            }
-            else
-            {
-                本地最大加速度向量.Z = -(轴向最大推力["ZN"] / 飞船质量);
-            }
-            if (推力计算方向.X < 0)
-            {
-                // 负X方向，使用XN推进器，加上负号
-                本地最大加速度向量.X = -(轴向最大推力["XN"] / 飞船质量);
-            }
-            else if (推力计算方向.X > 0)
-            {
-                // 正X方向，使用XP推进器
-                本地最大加速度向量.X = (轴向最大推力["XP"] / 飞船质量);
-            }
-            if (推力计算方向.Y < 0)
-            {
-                // 负Y方向，使用YN推进器，加上负号
-                本地最大加速度向量.Y = -(轴向最大推力["YN"] / 飞船质量);
-            }
-            else if (推力计算方向.Y > 0)
-            {
-                // 正Y方向，使用YP推进器
-                本地最大加速度向量.Y = (轴向最大推力["YP"] / 飞船质量);
-            }
-
-            // ----- 步骤3: 将本地最大加速度向量转换到世界坐标系 -----
-            导弹状态信息.导弹世界最大过载 = Vector3D.TransformNormal(本地最大加速度向量, 控制器.WorldMatrix);
-
-            // ----- 步骤4: 在世界坐标系中计算直角三角形的径向分量 -----
-            double 世界最大加速度模长平方 = 导弹状态信息.导弹世界最大过载.LengthSquared();
-            double 比例导航加速度模长平方 = 比例导航加速度.LengthSquared();
-
-            // 计算差值
-            double 径向分量平方 = 世界最大加速度模长平方 - 比例导航加速度模长平方;
-
-            // ----- 步骤5: 计算接近加速度 -----
-            Vector3D 接近加速度;
-            if (世界最大加速度模长平方 <= 比例导航加速度模长平方)
-            {
-                // 推进器能力不足，使用最小接近加速度
-                接近加速度 = 参数们.最小接近加速度 * 视线单位向量;
-            }
-            else
-            {
-                double 径向加速度大小 = Math.Sqrt(径向分量平方);
-                径向加速度大小 = Math.Max(径向加速度大小, 参数们.最小接近加速度);
-                接近加速度 = 径向加速度大小 * 视线单位向量;
-
-            }
-            导弹状态信息.导航常数 = 参数们.计算导航常数(Math.Sqrt(世界最大加速度模长平方), 视线.Length());
-            // ----- 步骤6: 合成飞行方向加速度 -----
-            Vector3D 飞行方向加速度 = 比例导航加速度 + 接近加速度;
-
-            // ----- 步骤7: 外力补偿后处理 -----
+            // 外部预计算：用于补偿外源扰动
             Vector3D 运动学加速度 = 控制器.GetAcceleration();
-            Vector3D 推进器输出加速度 = 导弹状态信息.导弹世界最大过载;
-            // 检测外源扰动并限制
-            外源扰动缓存.AddFirst(运动学加速度 - 推进器输出加速度);
+            // Vector3D 本地重力 = 控制器.GetNaturalGravity();
+
+            // 用于输出：最终推进器输出方向（迭代中的最大加速度方向）
+            Vector3D 最终最大过载向量 = Vector3D.Zero;
+            Vector3D 最终加速度指令 = Vector3D.Zero;
+            Vector3D 当前Cmd方向 = Vector3D.Normalize(比例导航加速度 + 参数们.最小接近加速度 * 视线单位向量);
+
+            for (int i = 0; i < 2; i++)
+            {
+                
+                // Step1: 当前Cmd方向下的最大加速度
+                Vector3D 当前Cmd本地 = Vector3D.TransformNormal(当前Cmd方向, MatrixD.Transpose(控制器.WorldMatrix));
+
+                Vector3D 本地最大加速度向量 = Vector3D.Zero;
+                本地最大加速度向量.X = 当前Cmd本地.X >= 0 ? (轴向最大推力["XP"] / 飞船质量) : -(轴向最大推力["XN"] / 飞船质量);
+                本地最大加速度向量.Y = 当前Cmd本地.Y >= 0 ? (轴向最大推力["YP"] / 飞船质量) : -(轴向最大推力["YN"] / 飞船质量);
+                本地最大加速度向量.Z = 当前Cmd本地.Z >= 0 ? (轴向最大推力["ZP"] / 飞船质量) : -(轴向最大推力["ZN"] / 飞船质量);
+
+                Vector3D 世界最大加速度向量 = Vector3D.TransformNormal(本地最大加速度向量, 控制器.WorldMatrix);
+                
+                double 世界最大加速度模长 = 世界最大加速度向量.Length();
+
+                // Step2: 判断是否足以提供ProNav指令
+                double ProNav模长 = 比例导航加速度.Length();
+                Vector3D 接近加速度 = Vector3D.Zero;
+
+                if (世界最大加速度模长 <= ProNav模长)
+                {
+                    // 提供不了，直接使用最小接近加速度
+                    接近加速度 = 参数们.最小接近加速度 * 视线单位向量;
+                }
+                else
+                {
+                    // 使用直角三角形原则分配
+                    double 剩余加速度平方 = 世界最大加速度模长 * 世界最大加速度模长 - ProNav模长 * ProNav模长;
+                    double 接近加速度大小 = Math.Sqrt(剩余加速度平方);
+                    接近加速度大小 = Math.Max(接近加速度大小, 参数们.最小接近加速度);
+                    接近加速度 = 接近加速度大小 * 视线单位向量;
+                }
+
+                Vector3D 当前Cmd = 比例导航加速度 + 接近加速度;
+                Vector3D 新方向 = Vector3D.Normalize(当前Cmd);
+                if ((新方向 - 当前Cmd方向).LengthSquared() < 参数们.最小向量长度)
+                {
+                    最终最大过载向量 = 世界最大加速度向量;
+                    最终加速度指令 = 当前Cmd;
+                    break;
+                }
+
+                当前Cmd方向 = 新方向;
+                最终最大过载向量 = 世界最大加速度向量;
+                最终加速度指令 = 当前Cmd;
+                
+            }
+            导弹状态信息.导弹最大过载 = Math.Max(导弹状态信息.导弹最大过载, 最终最大过载向量.Length());
+            导弹状态信息.导航常数 = 参数们.计算导航常数(最终最大过载向量.Length(), 视线.Length());
+
+            // Step3: 外力扰动补偿
+            外源扰动缓存.AddFirst(运动学加速度 - 最终最大过载向量);
             Vector3D 外源扰动加速度 = 外源扰动缓存.Average;
-            // 分离外力的平行（于飞行方向）和垂直分量
-            Vector3D 飞行方向单位向量 = Vector3D.Normalize(飞行方向加速度);
+
+            Vector3D 飞行方向单位向量 = Vector3D.Normalize(最终加速度指令);
             double 外力平行分量大小 = Vector3D.Dot(外源扰动加速度, 飞行方向单位向量);
-            Vector3D 外力平行分量 = 外力平行分量大小 * 飞行方向单位向量;
-            Vector3D 外力垂直分量 = 外源扰动加速度 - 外力平行分量;
+            Vector3D 外力垂直分量 = 外源扰动加速度 - (外力平行分量大小 * 飞行方向单位向量);
+
             if (外力垂直分量.LengthSquared() > 参数们.最大外力干扰 * 参数们.最大外力干扰)
             {
                 外力垂直分量 = 外力垂直分量.Normalized() * 参数们.最大外力干扰;
             }
+
             比例导航诊断信息.AppendLine($"[比例导航] 垂直干扰: {外力垂直分量.Length():n2} m/s²");
-            // 只补偿垂直分量，保留平行分量（如重力助推）
-            Vector3D 最终加速度命令 = 飞行方向加速度;
+
             if (参数们.启用外力干扰)
             {
-                最终加速度命令 = 飞行方向加速度 - 外力垂直分量;
+                return 最终加速度指令 - 外力垂直分量;
             }
-
-            return 最终加速度命令;
+            else
+            {
+                return 最终加速度指令;
+            }
         }
+
 
         /// <summary>
         /// 计算陀螺仪的目标转向角度，使其指向加速度命令
@@ -1779,7 +1768,7 @@ namespace IngameScript
             if (!引爆系统可用 || 控制器 == null) return false;
 
             bool 加速度触发 = 控制器.GetAcceleration().LengthSquared() >
-                            参数们.碰炸迟缓度 * 导弹状态信息.导弹世界最大过载.LengthSquared();
+                            参数们.碰炸迟缓度 * 导弹状态信息.导弹最大过载 * 导弹状态信息.导弹最大过载;
             if (!加速度触发) return false; 
 
             // 检查上次目标位置是否有效

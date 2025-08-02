@@ -54,7 +54,7 @@ namespace IngameScript
         public long 上次更新时间戳ms;
         public Vector3D 上帧视线角速度;
         public Vector3D 制导命令;
-        public Vector3D 导弹世界最大过载;
+        public double 导弹最大过载;
         // public Vector3D 导弹世界力学加速度; // 计算出的导弹世界坐标系下的力学加速度
         public Vector3D 上次预测目标位置; // 更新的“每帧”目标位置
         public double 导航常数;
@@ -70,7 +70,7 @@ namespace IngameScript
             上次状态 = 导弹状态机.待机状态;
             上次真实目标位置 = Vector3D.Zero;
             制导命令 = Vector3D.Zero;
-            导弹世界最大过载 = Vector3D.Zero;
+            导弹最大过载 = 0;
             // 导弹世界力学加速度 = Vector3D.Zero;
             角度误差在容忍范围内 = false;
             导航常数 = 3.0; // 默认值，会在初始化时设置
@@ -87,7 +87,7 @@ namespace IngameScript
             // 导弹状态信息.AppendLine($"[导弹状态] 当前状态: {当前状态转文字()}");
             // 导弹状态信息.AppendLine($"[导弹状态] 力学加速度: {导弹世界力学加速度.Length():F2}");
             导弹状态信息.AppendLine($"[导弹状态] 导航常数: {导航常数:F2}");
-            导弹状态信息.AppendLine($"[导弹状态] 可用过载: {导弹世界最大过载.Length():F2}");
+            导弹状态信息.AppendLine($"[导弹状态] 可用过载: {导弹最大过载:F2}");
             导弹状态信息.AppendLine($"[导弹状态] 需用过载: {制导命令.Length():F2}");
             return 导弹状态信息;
         }

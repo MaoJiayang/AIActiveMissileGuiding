@@ -55,7 +55,7 @@ namespace IngameScript
         /// <summary>
         /// 是否启用外力干扰计算
         /// </summary>
-        public bool 启用外力干扰 { get; set; } = false;
+        public bool 启用外力干扰 { get; set; } = true;
         /// <summary>
         /// 允许参与制导量计算的最大外力干扰量(m/s^2)
         /// 11.8约等于1.2g
@@ -370,7 +370,7 @@ namespace IngameScript
                     case "分离推进器名称":
                         分离推进器名称 = 参数值;
                         break;
-                    case "陀螺仪更新间隔":
+                    case "动力系统更新间隔":
                         动力系统更新间隔 = int.Parse(参数值);
                         break;
                     case "推进器重新分类间隔":

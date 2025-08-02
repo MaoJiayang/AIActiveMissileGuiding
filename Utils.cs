@@ -86,7 +86,7 @@ namespace IngameScript
                     if (_integral < _integralMin) _integral = _integralMin;
                 }
             }
-            
+
             // 如果output为Nan，重置控制器
             if (double.IsNaN(output) || double.IsInfinity(output))
             {
@@ -102,7 +102,7 @@ namespace IngameScript
             _integral = 0;
         }
     }
-    
+
     /// <summary>
     /// 三轴PID控制器，管理X、Y、Z三个独立的PID控制器
     /// </summary>
@@ -229,8 +229,8 @@ namespace IngameScript
         /// 获取Z轴PID控制器的引用
         /// </summary>
         public PID PidZ => _pidZ;
-    } 
-       
+    }
+
     public class CircularQueue<T>
     {
         private readonly T[] _items;
@@ -381,5 +381,57 @@ namespace IngameScript
         /// 当前队列中的元素数量
         /// </summary>
         public int Count => _size;
+    }
+
+    /// <summary>
+    /// 泛型滑动平均队列，O(1) 更新和查询。
+    /// 通过构造时传入运算委托，支持任意 T 类型。
+    /// var maVec = new MovingAverageQueue<Vector3D>(
+    ///     5,
+    ///     (a, b) => a + b,
+    ///     (a, b) => a - b,
+    ///     (a, n) => a / n
+    /// );
+    /// </summary>
+    public class MovingAverageQueue<T> : CircularQueue<T>
+    {
+        private readonly int _capacity;
+        private readonly Func<T, T, T> _add;
+        private readonly Func<T, T, T> _subtract;
+        private readonly Func<T, int, T> _divide;
+        private T _sum;
+
+        public MovingAverageQueue(
+            int capacity,
+            Func<T, T, T> add,
+            Func<T, T, T> subtract,
+            Func<T, int, T> divide
+        ) : base(capacity)
+        {
+            _capacity = capacity;
+            _add = add;
+            _subtract = subtract;
+            _divide = divide;
+            _sum = default(T);
+        }
+
+        public new void AddFirst(T item)
+        {
+            // 如果满了，取出将被覆盖的最旧值
+            T removed = default(T);
+            if (Count == _capacity)
+                removed = GetItemAt(Count - 1);
+
+            base.AddFirst(item);
+
+            // 更新累加和：sum = sum + item - removed
+            _sum = _subtract(_add(_sum, item), removed);
+        }
+
+        /// <summary> 当前窗口所有元素之和 </summary>
+        public T Sum => _sum;
+
+        /// <summary> 当前窗口移动平均值 = sum / Count </summary>
+        public T Average => Count > 0 ? _divide(_sum, Count) : default(T);
     }
 }

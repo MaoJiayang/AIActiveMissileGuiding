@@ -10,7 +10,7 @@ namespace IngameScript
     /// </summary>
     public class 参数管理器
     {  
-        public string 版本号 { get; } = "1.0.0";
+        public string 版本号 { get; } = "1.1.0";
         #region 制导相关参数
         /// <summary>
         /// 向量最小有效长度
@@ -52,6 +52,10 @@ namespace IngameScript
         /// </summary>
         public bool 启用攻击角度约束 { get; set; } = true;
 
+        /// <summary>
+        /// 是否启用外力干扰计算
+        /// </summary>
+        public bool 启用外力干扰 { get; set; } = false;
         /// <summary>
         /// 允许参与制导量计算的最大外力干扰量(m/s^2)
         /// 11.8约等于1.2g
@@ -431,6 +435,9 @@ namespace IngameScript
                     case "碰炸迟缓度":
                         碰炸迟缓度 = double.Parse(参数值);
                         break;
+                    case "启用外力干扰":
+                        启用外力干扰 = bool.Parse(参数值);
+                        break;
                 }
             }
             catch (Exception)
@@ -459,6 +466,7 @@ namespace IngameScript
             配置.AppendLine($"时间常数={时间常数}");
             配置.AppendLine($"角度误差最小值={角度误差最小值 * 180.0 / Math.PI}"); // 转换为度数显示
             配置.AppendLine($"导航常数初始值={导航常数初始值}");
+            配置.AppendLine($"启用外力干扰={启用外力干扰}");
             配置.AppendLine();
             配置.AppendLine("// 引爆相关参数");
             配置.AppendLine($"引爆距离阈值={引爆距离阈值}");
@@ -471,7 +479,7 @@ namespace IngameScript
             配置.AppendLine($"分离推进器名称={分离推进器名称}");
             配置.AppendLine();
             配置.AppendLine("// 状态切换时间参数");
-            配置.AppendLine($"陀螺仪更新间隔={动力系统更新间隔}");
+            配置.AppendLine($"动力系统更新间隔={动力系统更新间隔}");
             配置.AppendLine($"推进器重新分类间隔={推进器重新分类间隔}");
             配置.AppendLine($"目标位置不变最大帧数={目标位置不变最大帧数}");
             配置.AppendLine($"预测制导持续帧数={预测制导持续帧数}");

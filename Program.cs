@@ -40,7 +40,12 @@ namespace IngameScript
         private int 更新计数器 = 0;
         private long 当前时间戳ms { get { return (long)Math.Round(更新计数器 * 参数们.时间常数 * 1000); } }
 
-        Vector3D 外源扰动测试缓存 = Vector3D.Zero;
+        MovingAverageQueue<Vector3D> 外源扰动缓存 = new MovingAverageQueue<Vector3D>(
+            20,
+            (a, b) => a + b,
+            (a, b) => a - b,
+            (a, n) => a / n   // VRageMath.Vector3D 已重载 / double
+        );
 
         #endregion
 
@@ -1123,8 +1128,8 @@ namespace IngameScript
             Vector3D 速度方向 = 控制器.GetShipVelocities().LinearVelocity + 参数们.最小向量长度;
 
             // Vector3D 推力计算方向 = Vector3D.TransformNormal(速度方向, MatrixD.Transpose(控制器.WorldMatrix));
-            // Vector3D 推力计算方向 = Vector3D.TransformNormal(比例导航加速度, MatrixD.Transpose(控制器.WorldMatrix));
-            Vector3D 推力计算方向 = Vector3D.TransformNormal(视线单位向量, MatrixD.Transpose(控制器.WorldMatrix));
+            Vector3D 推力计算方向 = Vector3D.TransformNormal(比例导航加速度, MatrixD.Transpose(控制器.WorldMatrix));
+            // Vector3D 推力计算方向 = Vector3D.TransformNormal(视线单位向量, MatrixD.Transpose(控制器.WorldMatrix));
 
             // ----- 步骤2: 根据符号确定对应轴向推进器，计算本地加速度向量 -----
             Vector3D 本地最大加速度向量 = Vector3D.Zero;
@@ -1164,10 +1169,10 @@ namespace IngameScript
             }
 
             // ----- 步骤3: 将本地最大加速度向量转换到世界坐标系 -----
-            导弹状态信息.导弹世界主过载 = Vector3D.TransformNormal(本地最大加速度向量, 控制器.WorldMatrix);
+            导弹状态信息.导弹世界最大过载 = Vector3D.TransformNormal(本地最大加速度向量, 控制器.WorldMatrix);
 
             // ----- 步骤4: 在世界坐标系中计算直角三角形的径向分量 -----
-            double 世界最大加速度模长平方 = 导弹状态信息.导弹世界主过载.LengthSquared();
+            double 世界最大加速度模长平方 = 导弹状态信息.导弹世界最大过载.LengthSquared();
             double 比例导航加速度模长平方 = 比例导航加速度.LengthSquared();
 
             // 计算差值
@@ -1193,11 +1198,10 @@ namespace IngameScript
 
             // ----- 步骤7: 外力补偿后处理 -----
             Vector3D 运动学加速度 = 控制器.GetAcceleration();
-            Vector3D 推进器输出加速度 = 导弹状态信息.导弹世界主过载;
-
+            Vector3D 推进器输出加速度 = 导弹状态信息.导弹世界最大过载;
             // 检测外源扰动并限制
-            Vector3D 外源扰动加速度 = (运动学加速度 - 推进器输出加速度);
-            外源扰动测试缓存 = 外源扰动加速度;
+            外源扰动缓存.AddFirst(运动学加速度 - 推进器输出加速度);
+            Vector3D 外源扰动加速度 = 外源扰动缓存.Average;
             // 分离外力的平行（于飞行方向）和垂直分量
             Vector3D 飞行方向单位向量 = Vector3D.Normalize(飞行方向加速度);
             double 外力平行分量大小 = Vector3D.Dot(外源扰动加速度, 飞行方向单位向量);
@@ -1209,8 +1213,12 @@ namespace IngameScript
             }
             比例导航诊断信息.AppendLine($"[比例导航] 垂直干扰: {外力垂直分量.Length():n2} m/s²");
             // 只补偿垂直分量，保留平行分量（如重力助推）
-            Vector3D 最终加速度命令 = 飞行方向加速度 - 外力垂直分量;
-            
+            Vector3D 最终加速度命令 = 飞行方向加速度;
+            if (参数们.启用外力干扰)
+            {
+                最终加速度命令 = 飞行方向加速度 - 外力垂直分量;
+            }
+
             return 最终加速度命令;
         }
 
@@ -1459,9 +1467,15 @@ namespace IngameScript
             }
 
             // 针对每个轴应用推力控制
-            应用轴向推力(本地加速度.X, "XP", "XN", 飞船质量);
-            应用轴向推力(本地加速度.Y, "YP", "YN", 飞船质量);
-            应用轴向推力(本地加速度.Z, "ZP", "ZN", 飞船质量);
+            Vector3D 实际应用推力;
+            实际应用推力.X = 应用轴向推力(本地加速度.X, "XP", "XN", 飞船质量);
+            实际应用推力.Y = 应用轴向推力(本地加速度.Y, "YP", "YN", 飞船质量);
+            实际应用推力.Z = 应用轴向推力(本地加速度.Z, "ZP", "ZN", 飞船质量);
+
+            // // 将本地加速度转换回世界坐标系
+            // 导弹状态信息.导弹世界力学加速度 = Vector3D.TransformNormal(实际应用推力 / 飞船质量, 控制器.WorldMatrix);
+            // Echo($"[推进器] 动力学加速度夹角 {Vector3D.Angle(导弹状态信息.导弹世界力学加速度,控制器.GetAcceleration()):n2}");
+
         }
 
 
@@ -1518,7 +1532,7 @@ namespace IngameScript
         /// <summary>
         /// 为指定轴应用推力控制
         /// </summary>
-        private void 应用轴向推力(double 本地加速度, string 正方向组, string 负方向组, double 质量)
+        private double 应用轴向推力(double 本地加速度, string 正方向组, string 负方向组, double 质量)
         {
             // 计算所需力（牛顿）
             double 需要的力 = 质量 * Math.Abs(本地加速度);
@@ -1540,7 +1554,7 @@ namespace IngameScript
             List<IMyThrust> 推进器组;
             if (!推进器方向组.TryGetValue(激活组名, out 推进器组) || 推进器组.Count == 0)
             {
-                return; // 该方向没有推进器
+                return 0.0; // 该方向没有推进器
             }
 
             // 推进器已在分类时排序，无需重新排序
@@ -1585,18 +1599,17 @@ namespace IngameScript
                 // 移动到下一组推进器
                 当前索引 = i;
             }
-
             // // 输出调试信息
             // if (需要的力 > 总分配力 + 0.001)
             // {
             //     Echo($"[推进器] 轴向 {激活组名}推力缺口");
             // }
-
             // 关闭剩余的推进器
             for (int i = 当前索引; i < 推进器组.Count; i++)
             {
                 推进器组[i].ThrustOverride = 0f;
             }
+            return 本地加速度 > 0 ? 总分配力 : -总分配力;
         }
 
         /// <summary>
@@ -1766,7 +1779,7 @@ namespace IngameScript
             if (!引爆系统可用 || 控制器 == null) return false;
 
             bool 加速度触发 = 控制器.GetAcceleration().LengthSquared() >
-                            参数们.碰炸迟缓度 * 导弹状态信息.导弹世界主过载.LengthSquared();
+                            参数们.碰炸迟缓度 * 导弹状态信息.导弹世界最大过载.LengthSquared();
             if (!加速度触发) return false; 
 
             // 检查上次目标位置是否有效

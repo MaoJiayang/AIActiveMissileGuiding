@@ -66,7 +66,7 @@ namespace IngameScript
         ///  补偿项失效距离(米)
         /// 当目标距离小于此值时，补偿项将不再生效
         /// </summary>
-        public double 补偿项失效距离 { get; set; } = 50.0;
+        public double 补偿项失效距离 { get; set; } = 200.0;
 
         #endregion
 
@@ -191,14 +191,14 @@ namespace IngameScript
         public float 最大速度限制 { get; set; } = 200f;
 
         /// <summary>
-        /// 战斗块更新目标间隔(正常状态)
+        /// 战斗块更新目标间隔(0)
         /// </summary>
-        public int 战斗块更新间隔正常 { get; set; } = 0;
+        public int 战斗块更新间隔_搜索 { get; set; } = 0;
 
         /// <summary>
-        /// 战斗块更新目标间隔(跟踪状态)
+        /// 战斗块更新目标间隔(专注目标-30+)
         /// </summary>
-        public int 战斗块更新间隔跟踪 { get; set; } = 30;
+        public int 战斗块更新间隔_专注 { get; set; } = 30;
 
         /// <summary>
         /// 战斗块攻击模式
@@ -287,7 +287,7 @@ namespace IngameScript
         public double 计算导航常数(double 最大加速度, double 目标距离)
         {
             double 计算值 = 最大加速度 / 10.0;
-            计算值 *= Math.Max(目标距离 / 1000, 0.618); // 距离越远，导航常数越大
+            计算值 *= Math.Max(目标距离 / 1500, 0.1); // 距离越远，导航常数越大
             return Math.Min(Math.Max(计算值, 导航常数最小值), 导航常数最大值);
         }
 
@@ -418,10 +418,10 @@ namespace IngameScript
                         常驻滚转转速 = double.Parse(参数值);
                         break;
                     case "战斗块更新间隔正常":
-                        战斗块更新间隔正常 = int.Parse(参数值);
+                        战斗块更新间隔_搜索 = int.Parse(参数值);
                         break;
                     case "战斗块更新间隔跟踪":
-                        战斗块更新间隔跟踪 = int.Parse(参数值);
+                        战斗块更新间隔_专注 = int.Parse(参数值);
                         break;
                     case "代理控制器前缀":
                         代理控制器前缀 = 参数值;
@@ -489,8 +489,8 @@ namespace IngameScript
             配置.AppendLine($"目标历史最大长度={目标历史最大长度}");
             配置.AppendLine();
             配置.AppendLine("// 飞行AI参数");
-            配置.AppendLine($"战斗块更新间隔正常={战斗块更新间隔正常}");
-            配置.AppendLine($"战斗块更新间隔跟踪={战斗块更新间隔跟踪}");
+            配置.AppendLine($"战斗块更新间隔正常={战斗块更新间隔_搜索}");
+            配置.AppendLine($"战斗块更新间隔跟踪={战斗块更新间隔_专注}");
             配置.AppendLine($"最大速度限制={最大速度限制}");
             配置.AppendLine($"战斗块攻击模式={战斗块攻击模式}");
             配置.AppendLine($"目标优先级={目标优先级}");

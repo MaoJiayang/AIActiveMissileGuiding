@@ -103,6 +103,7 @@ namespace IngameScript
     public class BlockMotionTracker : IMyControllerCompat
     {
         private IMyTerminalBlock block;
+        private MyCubeSize _gridSize;
         private double updateIntervalSeconds;
         private MatrixD LastWorldMatrix;
         private Vector3D LastLinearVelocity;
@@ -118,6 +119,7 @@ namespace IngameScript
         public BlockMotionTracker(IMyTerminalBlock block, double updateIntervalSeconds = 0.0166666667, Action<string> Echo = null)
         {
             this.block = block;
+            this._gridSize = block.CubeGrid.GridSizeEnum;
             this.updateIntervalSeconds = Math.Max(1e-6, updateIntervalSeconds);
             this.LastWorldMatrix = block.WorldMatrix;
             this.LastLinearVelocity = block.CubeGrid.LinearVelocity;
@@ -163,7 +165,9 @@ namespace IngameScript
                         }
                         if (slim == null)
                         {
-                            totalMass += 20f; // 假设每个空位置的质量为20kg,一个轻甲块的质量
+                            if (_gridSize == MyCubeSize.Large)
+                                totalMass += 500f; //
+                            else totalMass += 20f; // 假设每个空位置的质量为一个轻甲块的质量
                         }
                     }
             _缓存质量 = new MyShipMass(totalMass, totalMass, totalMass);

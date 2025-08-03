@@ -90,7 +90,7 @@ namespace IngameScript
         private List<IMyThrust> 分离推进器列表 = new List<IMyThrust>();
 
         // 推进器分组映射表
-        private Dictionary<string, List<IMyThrust>> 推进器方向组 = new Dictionary<string, List<IMyThrust>>
+        private Dictionary<string, List<IMyThrust>> 推进器推力方向组 = new Dictionary<string, List<IMyThrust>>
         {
             {"XP", new List<IMyThrust>()}, {"XN", new List<IMyThrust>()},
             {"YP", new List<IMyThrust>()}, {"YN", new List<IMyThrust>()},
@@ -732,8 +732,10 @@ namespace IngameScript
                     if (初始化完整)
                     {
                         分类推进器(控制器);
-                        Vector3D 虚构目标位置 = 控制器.GetPosition() + 控制器.WorldMatrix.Forward * 1000;
-                        计算接近加速度并外力补偿(控制器.WorldMatrix.Forward * 1000, 虚构目标位置, 控制器);// 无意义，只是为了获取导弹的最大可能加速度
+                        计算接近加速度并外力补偿(控制器.WorldMatrix.Forward * 1000, 控制器.WorldMatrix.Forward, 控制器);// 无意义，只是为了获取导弹的最大可能加速度
+                        // Echo($"视线方向:{控制器.WorldMatrix.Forward * 1000}");
+                        // Echo($"虚构(加速度指令):{控制器.WorldMatrix.Forward}");
+                        // throw new Exception("测试报错");
                     }
                     else
                     {
@@ -741,9 +743,9 @@ namespace IngameScript
                         初始化消息.AppendLine($"或缺少AI组件，请检查");
                         Echo(初始化消息.ToString());
                         初始化消息.Clear();
+                        比例导航诊断信息.Clear();
                         初始化计数器 = 0; // 归零
                         throw new Exception("硬件初始化不完整，无法继续运行");
-                        return false; // 初始化失败
                     }
                     初始化计数器 = 0; // 归零
                     return true; // 最后一步返回true
@@ -864,7 +866,7 @@ namespace IngameScript
             }
             if (分离推进器列表.Count == 0)
             {
-                分离推进器列表 = 推进器方向组["ZN"]; // 默认使用ZN方向的推进器
+                分离推进器列表 = 推进器推力方向组["ZN"]; // 默认使用ZN推力方向的推进器
             }
         }
 
@@ -1044,19 +1046,19 @@ namespace IngameScript
             Vector3D 导弹速度 = 控制器.GetShipVelocities().LinearVelocity;
             Vector3D 目标位置 = 目标信息.Value.Position;
             Vector3D 目标速度 = 目标信息.Value.Velocity;
-            Vector3D 导弹到目标 = 目标位置 - 导弹位置;
-            double 距离 = 导弹到目标.Length();
+            Vector3D 视线 = 目标位置 - 导弹位置;
+            double 距离 = 视线.Length();
             double 导弹速度长度 = 导弹速度.Length();
 
             if (距离 < 参数们.最小向量长度)
                 return Vector3D.Zero;
 
-            Vector3D 视线单位向量 = 导弹到目标 / 距离;
+            Vector3D 视线单位向量 = 视线 / 距离;
             Vector3D 相对速度 = 目标速度 - 导弹速度;
 
             // ----- 步骤2: 计算视线角速度 -----
-            Vector3D 视线角速度 = Vector3D.Cross(导弹到目标, 相对速度) /
-                                Math.Max(导弹到目标.LengthSquared(), 参数们.最小向量长度);
+            Vector3D 视线角速度 = Vector3D.Cross(视线, 相对速度) /
+                                Math.Max(视线.LengthSquared(), 参数们.最小向量长度);
 
             // ----- 步骤3 计算加速度（使用上帧数据） -----
             // 计算视线角加速度
@@ -1083,14 +1085,14 @@ namespace IngameScript
 
             // ----- 步骤5: 添加微分补偿项 -----
             敌加速度缓存.AddFirst(目标跟踪器.currentTargetAcceleration);
-            if (距离 > 参数们.补偿项失效距离)
-            {
+            // if (距离 > 参数们.补偿项失效距离)
+            // {
                 // Vector3D 微分补偿项 = 计算增强比例导航加速度补偿(距离, 视线单位向量, 视线角加速度, 控制器.GetAcceleration(), 导弹状态信息.导航常数);
                 // 比例导航加速度 += 微分补偿项;
                 Vector3D 目标加速度 = 敌加速度缓存.Average;
                 Vector3D 横向加速度 = Vector3D.Cross(视线单位向量, 目标加速度);
                 比例导航加速度 += 横向加速度;// 依赖目标加速度估算
-            }
+            // }
 
             // ----- 步骤6: 可选的攻击角度约束 -----
             if (参数们.启用攻击角度约束)
@@ -1101,9 +1103,9 @@ namespace IngameScript
 
             // ----- 步骤7: 计算接近分量并执行重力补偿后处理 -----
             Vector3D 最终加速度命令;
-            if (导弹到目标.Length() > 参数们.最小向量长度)
+            if (视线.Length() > 参数们.最小向量长度)
             {
-                最终加速度命令 = 计算接近加速度并外力补偿(导弹到目标, 比例导航加速度, 控制器);
+                最终加速度命令 = 计算接近加速度并外力补偿(视线, 比例导航加速度, 控制器);
             }
             else
             {
@@ -1180,19 +1182,15 @@ namespace IngameScript
 
             for (int i = 0; i < 2; i++)
             {
-
                 // Step1: 当前Cmd方向下的最大加速度
                 Vector3D 当前Cmd本地 = Vector3D.TransformNormal(当前Cmd方向, MatrixD.Transpose(控制器.WorldMatrix));
-
                 Vector3D 本地最大加速度向量 = Vector3D.Zero;
                 本地最大加速度向量.X = 当前Cmd本地.X >= 0 ? (轴向最大推力["XP"] / 飞船质量) : -(轴向最大推力["XN"] / 飞船质量);
                 本地最大加速度向量.Y = 当前Cmd本地.Y >= 0 ? (轴向最大推力["YP"] / 飞船质量) : -(轴向最大推力["YN"] / 飞船质量);
-                本地最大加速度向量.Z = 当前Cmd本地.Z >= 0 ? (轴向最大推力["ZP"] / 飞船质量) : -(轴向最大推力["ZN"] / 飞船质量);
-
+                本地最大加速度向量.Z = 当前Cmd本地.Z >= 0 ? (轴向最大推力["ZP"] / 飞船质量) : -(轴向最大推力["ZN"] / 飞船质量);  
                 Vector3D 世界最大加速度向量 = Vector3D.TransformNormal(本地最大加速度向量, 控制器.WorldMatrix);
-
                 double 世界最大加速度模长 = 世界最大加速度向量.Length();
-
+                
                 // Step2: 判断是否足以提供ProNav指令
                 double ProNav模长 = 比例导航加速度.Length();
                 Vector3D 接近加速度 = Vector3D.Zero;
@@ -1517,42 +1515,42 @@ namespace IngameScript
         private void 分类推进器(IMyControllerCompat 控制器)
         {
             // 清空所有组中的推进器和推力记录
-            foreach (var key in 推进器方向组.Keys.ToList())
+            foreach (var key in 推进器推力方向组.Keys.ToList())
             {
-                推进器方向组[key].Clear();
+                推进器推力方向组[key].Clear();
                 轴向最大推力[key] = 0;
             }
 
             // 遍历所有推进器，根据其局部推进方向归类
             foreach (var 推进器 in 推进器列表)
             {
-                // 将推进器的世界方向转换到飞船本地坐标系
-                Vector3D 本地推力方向 = Vector3D.TransformNormal(推进器.WorldMatrix.Forward, MatrixD.Transpose(控制器.WorldMatrix));
-
+                // 将推进器的推力方向（正面是喷口，反方向是推力方向）转换到飞船本地坐标系
+                Vector3D 推进器推力方向 = 推进器.WorldMatrix.Backward;
+                // Vector3D 本地推力方向 = Vector3D.TransformNormal(推进器.WorldMatrix.Backward, MatrixD.Transpose(控制器.WorldMatrix));
                 // 根据推进方向分类并累加推力
                 string 分类轴向 = null;
-                if (Vector3D.Dot(本地推力方向, -Vector3D.UnitX) > 参数们.推进器方向容差)
+                if (Vector3D.Dot(推进器推力方向, 控制器.WorldMatrix.Right) > 参数们.推进器方向容差)
                     分类轴向 = "XP";
-                else if (Vector3D.Dot(本地推力方向, Vector3D.UnitX) > 参数们.推进器方向容差)
+                else if (Vector3D.Dot(推进器推力方向, -控制器.WorldMatrix.Right) > 参数们.推进器方向容差)
                     分类轴向 = "XN";
-                else if (Vector3D.Dot(本地推力方向, -Vector3D.UnitY) > 参数们.推进器方向容差)
+                else if (Vector3D.Dot(推进器推力方向, 控制器.WorldMatrix.Up) > 参数们.推进器方向容差)
                     分类轴向 = "YP";
-                else if (Vector3D.Dot(本地推力方向, Vector3D.UnitY) > 参数们.推进器方向容差)
+                else if (Vector3D.Dot(推进器推力方向, -控制器.WorldMatrix.Up) > 参数们.推进器方向容差)
                     分类轴向 = "YN";
-                else if (Vector3D.Dot(本地推力方向, -Vector3D.UnitZ) > 参数们.推进器方向容差)
-                    分类轴向 = "ZP";
-                else if (Vector3D.Dot(本地推力方向, Vector3D.UnitZ) > 参数们.推进器方向容差)
+                else if (Vector3D.Dot(推进器推力方向, 控制器.WorldMatrix.Forward) > 参数们.推进器方向容差)
                     分类轴向 = "ZN";
-
+                else if (Vector3D.Dot(推进器推力方向, -控制器.WorldMatrix.Forward) > 参数们.推进器方向容差)
+                    分类轴向 = "ZP";
+                Echo($"[推进器] 推进器 {推进器.CustomName} 分类为 {分类轴向}");
                 if (分类轴向 != null)
                 {
-                    推进器方向组[分类轴向].Add(推进器);
+                    推进器推力方向组[分类轴向].Add(推进器);
                     轴向最大推力[分类轴向] += 推进器.MaxEffectiveThrust;
                 }
             }
 
             // 对每个方向组内的推进器按最大有效推力从大到小排序
-            foreach (var 组 in 推进器方向组.Values)
+            foreach (var 组 in 推进器推力方向组.Values)
             {
                 组.Sort((a, b) => b.MaxEffectiveThrust.CompareTo(a.MaxEffectiveThrust));
             }
@@ -1575,7 +1573,7 @@ namespace IngameScript
 
             // 首先关闭反方向的推进器组
             List<IMyThrust> 关闭组;
-            if (推进器方向组.TryGetValue(关闭组名, out 关闭组))
+            if (推进器推力方向组.TryGetValue(关闭组名, out 关闭组))
             {
                 foreach (var 推进器 in 关闭组)
                 {
@@ -1584,7 +1582,7 @@ namespace IngameScript
             }
             // 获取对应方向的推进器组（已排序）
             List<IMyThrust> 推进器组;
-            if (!推进器方向组.TryGetValue(激活组名, out 推进器组) || 推进器组.Count == 0)
+            if (!推进器推力方向组.TryGetValue(激活组名, out 推进器组) || 推进器组.Count == 0)
             {
                 return 0.0; // 该方向没有推进器
             }
@@ -1809,11 +1807,11 @@ namespace IngameScript
         private bool 检查碰撞触发()
         {
             if (!引爆系统可用 || 控制器 == null) return false;
-
-            bool 加速度触发 = 控制器.GetAcceleration().LengthSquared() >
+            // Echo($"检查引爆条件...当前过载：{导弹状态信息.导弹最大过载:n2}");
+            bool 加速度触发 = 控制器.GetAcceleration().LengthSquared() - 参数们.最大外力干扰 * 参数们.最大外力干扰 >
                             参数们.碰炸迟缓度 * 导弹状态信息.导弹最大过载 * 导弹状态信息.导弹最大过载;
             if (!加速度触发) return false;
-
+            if (参数们.手动保险超控) return true;
             // 检查上次目标位置是否有效
             if (导弹状态信息.上次预测目标位置.Equals(Vector3D.Zero)) return false;
             Vector3D 当前位置 = 控制器.GetPosition();

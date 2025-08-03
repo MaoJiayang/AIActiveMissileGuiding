@@ -126,6 +126,7 @@ namespace IngameScript
             this.LinearVelocity = block.CubeGrid.LinearVelocity;
             this.AngularVelocity = Vector3D.Zero;
             this.Echo = Echo ?? (msg => { }); // 默认空实现，避免空引用异常
+            Update(); // 初始化时更新一次位置和速度
         }
 
         /// <summary>
@@ -150,7 +151,6 @@ namespace IngameScript
             // 如果缓存有效，直接返回
             if (_缓存质量.PhysicalMass >= 0 && 方块空间占用 == max - min)
                 return _缓存质量;
-
             float totalMass = 0f;
             var visited = new HashSet<IMySlimBlock>();
             for (int x = min.X; x <= max.X; x++)

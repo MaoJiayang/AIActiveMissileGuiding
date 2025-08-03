@@ -45,7 +45,7 @@ namespace IngameScript
         public 导弹状态机 当前状态;
         public 导弹状态机 上次状态;
         public Vector3D 上次真实目标位置;// AI块的“每帧”
-        public bool 角度误差在容忍范围内; 
+        public bool 角度误差在容忍范围内;
 
         // 只更新一次
         public double 陀螺仪最高转速;
@@ -107,5 +107,9 @@ namespace IngameScript
             }
         }
     }
+    #endregion
+
+    #region 导弹硬件
+    
     #endregion
 }

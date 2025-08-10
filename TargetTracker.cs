@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using VRageMath;
 using Sandbox.ModAPI.Ingame;
+using System.Numerics;
 
 namespace IngameScript
 {
@@ -12,20 +13,31 @@ namespace IngameScript
     {
         public Vector3D Position;
         public Vector3D Velocity;
-        public long TimeStamp; // 以毫秒为单位
-        public SimpleTargetInfo(Vector3D position, Vector3D velocity, long timeStamp)
+        public Vector3D Acceleration;
+        public long TimeStamp;
+
+        /// <summary>
+        /// 用于创建 SimpleTargetInfo 的构造函数
+        /// </summary>
+        /// <param name="position">位置信息，必须真实</param>
+        /// <param name="velocity">速度信息，可以为零</param>
+        /// <param name="acceleration">加速度信息，可以为零</param>
+        /// <param name="timeStamp">时间戳ms</param>
+        public SimpleTargetInfo(Vector3D position, Vector3D velocity, Vector3D acceleration, long timeStamp)
         {
             Position = position;
             Velocity = velocity;
+            Acceleration = acceleration;
             TimeStamp = timeStamp;
         }
 
-        // 从 MyDetectedEntityInfo 创建
+        // 从 MyDetectedEntityInfo 创建 由于缺少加速度信息，因此使用零向量填充
         public static SimpleTargetInfo FromDetectedInfo(MyDetectedEntityInfo info)
         {
             return new SimpleTargetInfo(
                 info.Position,
                 new Vector3D(info.Velocity),
+                Vector3D.Zero,
                 info.TimeStamp
             );
         }
@@ -61,7 +73,6 @@ namespace IngameScript
         public double linearWeight, circularWeight;
         public double linearPositionError, circularPositionError, combinationError;
         public double maxTargetAcceleration = 0; // 最大目标加速度（单位：m/s²）
-        public Vector3D currentTargetAcceleration = Vector3D.Zero; // 当前目标加速度（单位：m/s²）
         // 目标历史记录最大长度
         private readonly int _maxHistory;
         // 目标历史记录，最新数据放在链表头部
@@ -120,12 +131,14 @@ namespace IngameScript
         {
             UpdateTarget(SimpleTargetInfo.FromDetectedInfo(target), hasVelocityAvailable);
         }
-
         public void UpdateTarget(Vector3D position, Vector3D velocity, long timeStamp, bool hasVelocityAvailable = false)
         {
-            UpdateTarget(new SimpleTargetInfo(position, velocity, timeStamp), hasVelocityAvailable);
+            UpdateTarget(new SimpleTargetInfo(position, velocity, Vector3D.Zero, timeStamp), hasVelocityAvailable);
         }
-
+        public void UpdateTarget(Vector3D position, long timeStamp, bool hasVelocityAvailable = false)
+        {
+            UpdateTarget(new SimpleTargetInfo(position, Vector3D.Zero, Vector3D.Zero, timeStamp), hasVelocityAvailable);
+        }
         /// <summary>
         /// 清空目标历史记录
         /// </summary>
@@ -177,7 +190,7 @@ namespace IngameScript
         {
             if (_history.Count == 0)
             {
-                return new SimpleTargetInfo(Vector3D.Zero, Vector3D.Zero, 0);
+                return new SimpleTargetInfo();
             }
 
             if (_history.Count <= 2)
@@ -210,8 +223,9 @@ namespace IngameScript
 
                 Vector3D combinedPosition = linearPrediction.Position * linearWeight + circularPrediction.Position * circularWeight;
                 Vector3D combinedVelocity = linearPrediction.Velocity * linearWeight + circularPrediction.Velocity * circularWeight;
+                Vector3D combinedAcceleration = linearPrediction.Acceleration * linearWeight + circularPrediction.Acceleration * circularWeight;
 
-                return new SimpleTargetInfo(combinedPosition, combinedVelocity, p0.TimeStamp + futureTimeMs);
+                return new SimpleTargetInfo(combinedPosition, combinedVelocity, combinedAcceleration, p0.TimeStamp + futureTimeMs);
             }
             else if (useLinear)
             {
@@ -241,7 +255,7 @@ namespace IngameScript
             var current = _history.First;
             double dt = futureTimeMs * 0.001;
             Vector3D predictedPos = current.Position + current.Velocity * dt;
-            return new SimpleTargetInfo(predictedPos, current.Velocity, current.TimeStamp + futureTimeMs);
+            return new SimpleTargetInfo(predictedPos, current.Velocity, Vector3D.Zero, current.TimeStamp + futureTimeMs);
         }
 
         /// <summary>
@@ -307,11 +321,10 @@ namespace IngameScript
             }
 
             // 根据情况重置/更新最大加速度记录
-            currentTargetAcceleration = acceleration;
             if (combinationError >= MaxAccResetThreshold) maxTargetAcceleration = 0;
             else maxTargetAcceleration = Math.Max(maxTargetAcceleration, acceleration.Length());
 
-            return new SimpleTargetInfo(predictedPos, predictedVel, p0.TimeStamp + futureTimeMs);
+            return new SimpleTargetInfo(predictedPos, predictedVel, acceleration, p0.TimeStamp + futureTimeMs);
         }
 
         /// <summary>
@@ -425,7 +438,10 @@ namespace IngameScript
             // 预测速度（旋转当前速度向量）
             Vector3D predictedVel = Vector3D.Transform(currentVel, rotation);
 
-            return new SimpleTargetInfo(predictedPos, predictedVel, p0.TimeStamp + futureTimeMs);
+            // 计算向心加速度向量（a = ω²·r，方向指向圆心）
+            Vector3D centripetalAcc = -circularParams.AngularVelocity * circularParams.AngularVelocity * rotatedRadius;
+
+            return new SimpleTargetInfo(predictedPos, predictedVel, centripetalAcc, p0.TimeStamp + futureTimeMs);
         }
 
         /// <summary>

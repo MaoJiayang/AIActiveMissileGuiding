@@ -10,7 +10,7 @@ namespace IngameScript
     /// </summary>
     public class 参数管理器
     {  
-        public string 版本号 { get; } = "1.1.0";
+        public string 版本号 { get; } = "1.1.1";
         #region 制导相关参数
         /// <summary>
         /// 向量最小有效长度
@@ -61,6 +61,12 @@ namespace IngameScript
         /// 11.8约等于1.2g
         /// </summary>
         public double 最大外力干扰 { get; set; } = 11.8;
+
+        /// <summary>
+        /// 导弹将会向着预测时间后的目标位置接近，取决于预估最近时间
+        /// 该参数决定最长的预测时间
+        /// </summary>
+        public long 最长接近预测时间 { get; set; } = 2000; // 最长预测时间(毫秒)
 
         /// <summary>
         ///  补偿项失效距离(米)
@@ -438,6 +444,9 @@ namespace IngameScript
                     case "启用外力干扰":
                         启用外力干扰 = bool.Parse(参数值);
                         break;
+                    case "最长接近预测时间":
+                        最长接近预测时间 = long.Parse(参数值);
+                        break;
                 }
             }
             catch (Exception)
@@ -467,6 +476,7 @@ namespace IngameScript
             配置.AppendLine($"角度误差最小值={角度误差最小值 * 180.0 / Math.PI}"); // 转换为度数显示
             配置.AppendLine($"导航常数初始值={导航常数初始值}");
             配置.AppendLine($"启用外力干扰={启用外力干扰}");
+            配置.AppendLine($"最长接近预测时间={最长接近预测时间}");
             配置.AppendLine();
             配置.AppendLine("// 引爆相关参数");
             配置.AppendLine($"引爆距离阈值={引爆距离阈值}");

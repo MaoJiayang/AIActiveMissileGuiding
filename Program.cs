@@ -70,7 +70,7 @@ namespace IngameScript
         // 控制组件
         private IMyControllerCompat 控制器;
         private List<IMyThrust> 推进器列表 = new List<IMyThrust>();
-        private List<IMyGyro> 陀螺仪列表 = new List<IMyGyro>();
+        private 陀螺仪瞄准系统 陀螺仪;
         private List<IMyGravityGeneratorBase> 重力发生器列表 = new List<IMyGravityGeneratorBase>();
         // 引爆系统组件（可选）
         private List<IMySensorBlock> 传感器列表 = new List<IMySensorBlock>();
@@ -102,18 +102,7 @@ namespace IngameScript
         {
             {"XP", 0}, {"XN", 0}, {"YP", 0}, {"YN", 0}, {"ZP", 0}, {"ZN", 0}
         };
-        private Dictionary<IMyGyro, Vector3D> 陀螺仪各轴点积 = new Dictionary<IMyGyro, Vector3D>();
         private bool 推进器已分类 = false;
-
-        #endregion
-
-        #region PID控制系统
-
-        // PID控制器 - 外环(角度误差->期望角速度)
-        private PID3 外环PID控制器PYR = null;
-
-        // PID控制器 - 内环(角速度误差->陀螺仪设定)
-        private PID3 内环PID控制器PYR = null;
 
         #endregion
 
@@ -141,8 +130,7 @@ namespace IngameScript
             // 初始化导弹状态数据
             导弹状态信息 = new 导弹状态量();
             参数们 = new 参数管理器(Me);
-            // 初始化PID控制器
-            初始化PID控制器();
+            陀螺仪 = new 陀螺仪瞄准系统(参数们, Me);
 
             // 初始化目标跟踪器
             目标跟踪器 = new TargetTracker(参数们.目标历史最大长度);
@@ -156,21 +144,6 @@ namespace IngameScript
             // 设置更新频率为每tick执行
             Runtime.UpdateFrequency = UpdateFrequency.Update1;
             已经初始化 = 初始化硬件();
-        }
-
-        /// <summary>
-        /// 初始化PID控制器
-        /// </summary>
-        private void 初始化PID控制器()
-        {
-            double pid时间常数 = 参数们.获取PID时间常数();
-
-            // 初始化外环PID控制器
-            外环PID控制器PYR = new PID3(参数们.外环参数.P系数, 参数们.外环参数.I系数, 参数们.外环参数.D系数, pid时间常数);
-
-            // 初始化内环PID控制器
-            内环PID控制器PYR = new PID3(参数们.内环参数.P系数, 参数们.内环参数.I系数, 参数们.内环参数.D系数, pid时间常数);
-
         }
 
         public void Main(string argument, UpdateType updateSource)
@@ -263,8 +236,11 @@ namespace IngameScript
             导弹状态信息.当前状态 != 导弹状态机.引爆激发 &&
             导弹状态信息.当前状态 != 导弹状态机.引爆最终;
 
-            bool 控制器需更新 = 导弹保险解除 || 导弹状态信息.当前状态 == 导弹状态机.热发射阶段 || 参数们.手动保险超控;
-            Echo($"存在目标：{有有效目标}, 位置更新：{目标位置已改变}");
+            bool 控制器需更新 = 导弹保险解除 ||
+            导弹状态信息.当前状态 == 导弹状态机.热发射阶段 ||
+            参数们.手动保险超控;
+
+            Echo($"存在目标：{有有效目标}, 位置更新：{目标位置已改变}, 保险解除：{导弹保险解除}");
             if (控制器需更新) 控制器.Update();
 
             // 处理测试命令 - 进入测试状态
@@ -438,11 +414,7 @@ namespace IngameScript
                 }
 
                 // 关闭陀螺仪
-                foreach (var 陀螺仪 in 陀螺仪列表)
-                {
-                    陀螺仪.GyroOverride = false;
-                    陀螺仪.Enabled = false;
-                }
+                陀螺仪.重置();
 
                 // 关闭重力发生器
                 foreach (var 重力发生器 in 重力发生器列表)
@@ -483,15 +455,15 @@ namespace IngameScript
                     }
                 }
 
-                // 启用陀螺仪但不给指令
-                foreach (var 陀螺仪 in 陀螺仪列表)
-                {
-                    陀螺仪.Enabled = true;
-                    陀螺仪.GyroOverride = true;
-                    陀螺仪.Pitch = 0f;
-                    陀螺仪.Yaw = 0f;
-                    陀螺仪.Roll = 0f;
-                }
+                // // 启用陀螺仪但不给指令
+                // foreach (var 陀螺仪 in 陀螺仪列表)
+                // {
+                //     陀螺仪.Enabled = true;
+                //     陀螺仪.GyroOverride = true;
+                //     陀螺仪.Pitch = 0f;
+                //     陀螺仪.Yaw = 0f;
+                //     陀螺仪.Roll = 0f;
+                // }
 
                 // 只启用分离推进器，其他推进器保持关闭
                 foreach (var 推进器 in 推进器列表)
@@ -588,15 +560,9 @@ namespace IngameScript
                     推进器.ThrustOverride = 0f;
                 }
                 // 停止陀螺仪覆盖
-                foreach (var 陀螺仪 in 陀螺仪列表)
-                {
-                    陀螺仪.Pitch = 0f;
-                    陀螺仪.Yaw = 0f;
-                    陀螺仪.Roll = 0f;
-                }
+                陀螺仪.重置();
                 目标跟踪器.ClearHistory();// 清空目标历史
-                内环PID控制器PYR.Reset(); // 重置内环PID控制器
-                外环PID控制器PYR.Reset(); // 重置外环PID控制器
+
             }
 
         }
@@ -720,9 +686,8 @@ namespace IngameScript
                     方块组.GetBlocksOfType(推进器列表);
                     return false;
 
-                case 8: // Stage 4: 获取陀螺仪
-                    陀螺仪列表.Clear();
-                    方块组.GetBlocksOfType(陀螺仪列表);
+                case 8: // Stage 4: 初始化陀螺仪系统
+                    陀螺仪.初始化(方块组, 控制器);
                     return false;
 
                 case 10: // Stage 5: 获取重力发生器
@@ -747,7 +712,7 @@ namespace IngameScript
                     return false;
 
                 case 20: // Stage 10: 初始化AI组件并完成
-                    bool 初始化完整 = 配置AI组件(方块组) && 控制器 != null && 推进器列表.Count > 0 && 陀螺仪列表.Count > 0;
+                    bool 初始化完整 = 配置AI组件(方块组) && 控制器 != null && 推进器列表.Count > 0 && 陀螺仪.已初始化;
                     if (初始化完整)
                     {
                         分类推进器(控制器);
@@ -758,7 +723,7 @@ namespace IngameScript
                     }
                     else
                     {
-                        初始化消息.AppendLine($"硬件初始化不完整: 控制器={控制器?.CustomName}, 推进器={推进器列表.Count}, 陀螺仪={陀螺仪列表.Count}");
+                        初始化消息.AppendLine($"硬件初始化不完整: 控制器={控制器?.CustomName}, 推进器={推进器列表.Count}, 陀螺仪={陀螺仪.初始化消息}");
                         初始化消息.AppendLine($"或缺少AI组件，请检查");
                         Echo(初始化消息.ToString());
                         初始化消息.Clear();
@@ -1041,10 +1006,8 @@ namespace IngameScript
         /// </summary>
         private void 应用制导命令(Vector3D 加速度命令, IMyControllerCompat 控制器)
         {
-            // 计算目标角度
-            Vector3D 目标角度PYR = 计算陀螺仪目标角度(加速度命令, 控制器);
             // 控制陀螺仪
-            应用陀螺仪控制(目标角度PYR);
+            陀螺仪.方向瞄准(加速度命令);
             // 控制推进器
             控制推进器(加速度命令, 控制器);
         }
@@ -1259,36 +1222,6 @@ namespace IngameScript
             }
         }
 
-
-        /// <summary>
-        /// 计算陀螺仪的目标转向角度，使其指向加速度命令
-        /// </summary>
-        private Vector3D 计算陀螺仪目标角度(Vector3D 加速度命令, IMyControllerCompat 控制器)
-        {
-            // 计算加速度方向作为期望的转向（世界坐标系）
-            Vector3D 期望方向 = Vector3D.Normalize(加速度命令);
-
-            // 获取导弹当前前向（世界坐标系）
-            Vector3D 当前前向 = 控制器.WorldMatrix.Forward;
-
-            // 计算目标与当前前向的夹角（误差，单位弧度）
-            double 点积 = Vector3D.Dot(当前前向, 期望方向);
-            点积 = Math.Max(-1, Math.Min(1, 点积)); // 限制范围防止数值误差
-            double 角度误差 = Math.Acos(点积);
-
-            // 计算旋转轴向（世界坐标系）
-            Vector3D 旋转轴 = Vector3D.Cross(当前前向, 期望方向);
-            if (旋转轴.LengthSquared() < 1e-8)
-                旋转轴 = Vector3D.Zero;
-            else
-                旋转轴 = Vector3D.Normalize(旋转轴);
-
-            // 得到目标角偏差向量（世界坐标系下），单位弧度
-            Vector3D 目标角度PYR = 旋转轴 * 角度误差;
-            // Echo($"[陀螺仪] 角度误差: {角度误差 * 180.0 / Math.PI:n1} 度");
-            return 目标角度PYR;
-        }
-
         /// <summary>
         /// 计算攻击角度约束所需的加速度补偿量
         /// </summary>
@@ -1357,155 +1290,6 @@ namespace IngameScript
         #endregion
 
         #region 飞行控制系统
-
-        /// <summary>
-        /// 控制陀螺仪实现所需转向
-        /// </summary>
-        private void 应用陀螺仪控制(Vector3D 目标角度PYR)
-        {
-            // 检查角度误差是否在阈值范围内
-            double 角度误差大小 = 目标角度PYR.Length();
-            if (角度误差大小 < 参数们.角度误差最小值 && !导弹状态信息.角度误差在容忍范围内)
-            {
-                // 角度误差很小，停止陀螺仪以减少抖动
-                foreach (var 陀螺仪 in 陀螺仪列表)
-                {
-                    Vector3D 陀螺仪本地命令 = Vector3D.Zero;
-                    陀螺仪本地命令 = 加入本地滚转(陀螺仪, 陀螺仪本地命令, 参数们.常驻滚转转速);
-                    施加本地转速指令(陀螺仪, 陀螺仪本地命令);
-                }
-                // 重置所有PID控制器
-                外环PID控制器PYR.Reset();
-                内环PID控制器PYR.Reset();
-                导弹状态信息.角度误差在容忍范围内 = true;
-                return;
-            }
-            导弹状态信息.角度误差在容忍范围内 = false;
-            // 仅在指定更新间隔执行，减少过度控制
-            if (更新计数器 % 参数们.动力系统更新间隔 != 0)
-                return;
-            // ----------------- 外环：角度误差 → 期望角速度 (世界坐标系) -----------------
-            // 使用PD控制器将角度误差转换为期望角速度
-            Vector3D 期望角速度PYR = 外环PID控制器PYR.GetOutput(目标角度PYR);
-            // ----------------- 内环：角速度误差 → 最终指令 (世界坐标系) -----------------
-            // 获取飞船当前角速度（单位：弧度/秒），已在世界坐标系下
-            Vector3D 当前角速度 = 控制器.GetShipVelocities().AngularVelocity;
-            // 计算各轴角速度误差
-            Vector3D 速率误差PYR = 期望角速度PYR - 当前角速度;
-            // 内环PD：将角速度误差转换为最终下发指令
-            Vector3D 最终旋转命令PYR = 内环PID控制器PYR.GetOutput(速率误差PYR);
-            // ----------------- 应用到各陀螺仪 -----------------
-            foreach (var 陀螺仪 in 陀螺仪列表)
-            {
-                // 使用陀螺仪世界矩阵将世界坐标的角速度转换为陀螺仪局部坐标系
-                Vector3D 陀螺仪本地转速命令 = Vector3D.TransformNormal(最终旋转命令PYR, MatrixD.Transpose(陀螺仪.WorldMatrix));
-                陀螺仪本地转速命令 = 加入本地滚转(陀螺仪, 陀螺仪本地转速命令, 参数们.常驻滚转转速);
-                施加本地转速指令(陀螺仪, 陀螺仪本地转速命令);
-            }
-        }
-
-        /// <summary>
-        /// 将本地指令实际应用到陀螺仪，带懒惰更新
-        /// 仅在指令有变化时更新陀螺仪的转速
-        /// </summary>
-        private void 施加本地转速指令(IMyGyro 陀螺仪, Vector3D 本地指令)
-        {
-            陀螺仪.GyroOverride = true;
-            // 注意陀螺仪的轴向定义与游戏世界坐标系的差异，需要取负
-            if (陀螺仪命令需更新(陀螺仪.Pitch, -(float)本地指令.X)) 陀螺仪.Pitch = -(float)本地指令.X;
-            if (陀螺仪命令需更新(陀螺仪.Yaw, -(float)本地指令.Y)) 陀螺仪.Yaw = -(float)本地指令.Y;
-            if (陀螺仪命令需更新(陀螺仪.Roll, -(float)本地指令.Z)) 陀螺仪.Roll = -(float)本地指令.Z;
-        }
-
-        /// <summary>
-        /// 找出滚转轴，并返回陀螺仪本地命令加上正确的滚转向量
-        /// </summary>
-        /// <param name="陀螺仪">陀螺仪块</param>
-        /// <param name="陀螺仪本地命令">陀螺仪的本地命令向量</param>
-        /// <param name="弧度每秒">滚转速度（弧度/秒）包含方向</param>
-        /// <returns>应施加的本地命令向量 包含滚转轴的命令</returns>
-        private Vector3D 加入本地滚转(IMyGyro 陀螺仪, Vector3D 陀螺仪本地命令, double 弧度每秒 = 0.0)
-        {
-            Vector3D 该陀螺仪点积 = 陀螺仪对轴(陀螺仪, 控制器);
-            // if (弧度每秒 < 参数们.最小向量长度)
-            // {
-            //     return 陀螺仪本地命令; // 不需要滚转
-            // }
-            // 检查各轴与导弹Z轴的点积，判断是否同向
-            double X轴点积 = Math.Abs(该陀螺仪点积.X);
-            double Y轴点积 = Math.Abs(该陀螺仪点积.Y);
-            double Z轴点积 = Math.Abs(该陀螺仪点积.Z);
-
-            if (X轴点积 > 参数们.推进器方向容差 && X轴点积 >= Y轴点积 && X轴点积 >= Z轴点积)
-            {
-                陀螺仪本地命令.X = Math.Sign(该陀螺仪点积.X) * 弧度每秒;
-            }
-            else if (Y轴点积 > 参数们.推进器方向容差 && Y轴点积 >= X轴点积 && Y轴点积 >= Z轴点积)
-            {
-                陀螺仪本地命令.Y = Math.Sign(该陀螺仪点积.Y) * 弧度每秒;
-            }
-            else if (Z轴点积 > 参数们.推进器方向容差 && Z轴点积 >= X轴点积 && Z轴点积 >= Y轴点积)
-            {
-                陀螺仪本地命令.Z = -Math.Sign(该陀螺仪点积.Z) * 弧度每秒;
-                // 备注：已知se旋转绕负轴，所以指令传入的时候已经全部取负
-                // 又因为，该方法一般都用于直接覆盖已经计算好的陀螺仪本地命令，
-                // 所以这里需要根据转速再取一次负
-            }
-            return 陀螺仪本地命令;
-        }
-
-        /// <summary>
-        /// 计算陀螺仪各轴与导弹Z轴的点积并缓存
-        /// 如果有缓存则直接取出
-        /// 目的：找出滚转轴
-        /// </summary>
-        private Vector3D 陀螺仪对轴(IMyGyro 陀螺仪, IMyControllerCompat 控制器)
-        {
-            // 获取导弹Z轴方向（控制器的前进方向）
-            Vector3D 导弹Z轴方向 = 控制器.WorldMatrix.Forward;
-
-            Vector3D 该陀螺仪点积;
-            if (!陀螺仪各轴点积.TryGetValue(陀螺仪, out 该陀螺仪点积))
-            {
-                // 获取陀螺仪的三个本地轴在世界坐标系中的方向
-                Vector3D 陀螺仪X轴世界方向 = 陀螺仪.WorldMatrix.Right;    // 对应本地X轴（Pitch）
-                Vector3D 陀螺仪Y轴世界方向 = 陀螺仪.WorldMatrix.Up;       // 对应本地Y轴（Yaw）
-                Vector3D 陀螺仪Z轴世界方向 = 陀螺仪.WorldMatrix.Forward;   // 对应本地Z轴（Roll）
-                该陀螺仪点积 = new Vector3D(
-                    Vector3D.Dot(陀螺仪X轴世界方向, 导弹Z轴方向),
-                    Vector3D.Dot(陀螺仪Y轴世界方向, 导弹Z轴方向),
-                    Vector3D.Dot(陀螺仪Z轴世界方向, 导弹Z轴方向)
-                );
-                陀螺仪各轴点积[陀螺仪] = 该陀螺仪点积;
-            }
-            return 该陀螺仪点积;
-        }
-
-        /// <summary>
-        /// 判断是否需要更新陀螺仪命令
-        /// 如果当前值已经接近最大值，且新命令在同方向且更大，则不更新
-        /// 如果差异很小，也不更新
-        /// 目的：减少陀螺仪频繁更新导致出力不足
-        /// </summary>
-        private bool 陀螺仪命令需更新(double 当前值, double 新值, double 容差 = 1e-3)
-        {
-
-            if (Math.Abs(当前值) > 导弹状态信息.陀螺仪最高转速 - 容差)
-            {
-                // 当前值接近最大值
-                if (Math.Sign(当前值) == Math.Sign(新值 + 参数们.最小向量长度) && Math.Abs(新值) >= Math.Abs(当前值))
-                {
-                    return false; // 不更新
-                }
-            }
-
-            // 如果差异很小，也不更新
-            if (Math.Abs(当前值 - 新值) < 容差)
-            {
-                return false;
-            }
-            return true;
-        }
 
         /// <summary>
         /// 控制推进器产生所需加速度
@@ -1746,10 +1530,7 @@ namespace IngameScript
                 else if (argument == "stop")
                 {
                     // 停止陀螺仪覆盖
-                    foreach (var 陀螺仪 in 陀螺仪列表)
-                    {
-                        陀螺仪.GyroOverride = false;
-                    }
+                    陀螺仪.重置();
                     // 停止推进器
                     foreach (var 推进器 in 推进器列表)
                     {
@@ -1763,7 +1544,7 @@ namespace IngameScript
                 if (需要更新目标)
                 {
                     目标跟踪器.UpdateTarget(测试目标位置, Vector3D.Zero, 当前时间戳ms);
-                    陀螺仪列表.ForEach(g => g.Enabled = true); // 确保陀螺仪开启
+                    // 陀螺仪列表.ForEach(g => g.Enabled = true); // 确保陀螺仪开启
                 }
             }
 
@@ -1779,8 +1560,8 @@ namespace IngameScript
                 比例导航制导(控制器, 假目标);
                 if (到目标向量.Length() > 参数们.最小向量长度)
                 {
-                    Vector3D 目标角度 = 计算陀螺仪目标角度(到目标向量 * 10, 控制器);
-                    应用陀螺仪控制(目标角度);
+                    // 陀螺仪.方向瞄准(到目标向量);
+                    陀螺仪.点瞄准(最新目标位置);
                     Echo($"测试状态控制中");
                     Echo($"加速与前向夹角: {Vector3D.Angle(控制器.WorldMatrix.Forward, 控制器.GetAcceleration()):n2}");
                     Echo($"运动学加速度: {控制器.GetAcceleration().Length():n2}");

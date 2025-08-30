@@ -1,25 +1,11 @@
-using Sandbox.Game.EntityComponents;
 using Sandbox.ModAPI.Ingame;
-using Sandbox.ModAPI.Interfaces;
-using SpaceEngineers.Game.ModAPI.Ingame;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
-using System.Reflection;
-using System.Text;
-using VRage;
-using VRage.Collections;
 using VRage.Game;
-using VRage.Game.Components;
-using VRage.Game.Components.Interfaces;
-using VRage.Game.GUI.TextPanel;
 using VRage.Game.ModAPI.Ingame;
-using VRage.Game.ModAPI.Ingame.Utilities;
-using VRage.Game.ObjectBuilders.Definitions;
-using VRage.ObjectBuilders;
 using VRageMath;
+using Vector2 = VRageMath.Vector2;
 namespace IngameScript
 {
     // 1. 定义兼容接口
@@ -97,6 +83,9 @@ namespace IngameScript
         /// 更新位置和速度（BlockMotionTracker需定期调用，真实控制器可为空实现）。
         /// </summary>
         void Update();
+        IMyCubeGrid CubeGrid { get; }
+        double RollIndicator { get; }
+        Vector2 RotationIndicator { get; }
     }
 
     // 2. BlockMotionTracker 实现接口
@@ -137,12 +126,16 @@ namespace IngameScript
             UpdateAcceleration();
             UpdateAngularVelocity();
         }
-
+        public Vector3D GetAcceleration() { return LinearAcceleration; }
+        // 以下重力获取相关内容没有被实现，请使用差分计算重力。
         public Vector3D GetNaturalGravity() { return Vector3D.Zero; }
         public Vector3D GetArtificialGravity() { return Vector3D.Zero; }
         public Vector3D GetTotalGravity() { return GetNaturalGravity() + GetArtificialGravity(); }
         public double GetShipSpeed() { return LinearVelocity.Length(); }
         public MyShipVelocities GetShipVelocities() { return new MyShipVelocities(block.CubeGrid.LinearVelocity, AngularVelocity); }
+        public IMyCubeGrid CubeGrid { get { return block.CubeGrid; } }
+        public double RollIndicator { get { return 0; } }// 普通方块无法获取
+        public Vector2 RotationIndicator { get { return Vector2.Zero; } }// 普通方块无法获取
         public MyShipMass CalculateShipMass()
         {
             IMyCubeGrid grid = block.CubeGrid;
@@ -175,7 +168,6 @@ namespace IngameScript
             return _缓存质量;
         }
         public Vector3D GetPosition() { return block.GetPosition(); }
-        public Vector3D GetAcceleration() { return LinearAcceleration; }
         public bool IsFunctional { get { return block.IsFunctional; } }
         public bool Closed { get { return block.Closed; } }
 
@@ -233,6 +225,9 @@ namespace IngameScript
         public MatrixD WorldMatrix { get { return ctrl.WorldMatrix; } }
         public bool IsFunctional { get { return ctrl.IsFunctional; } }
         public bool Closed { get { return ctrl.Closed; } }
+        public IMyCubeGrid CubeGrid { get { return ctrl.CubeGrid; } }
+        public double RollIndicator { get { return ctrl.RollIndicator; } }
+        public Vector2 RotationIndicator { get { return ctrl.RotationIndicator; } }
         public ShipControllerAdapter(IMyShipController ctrl, double updateIntervalSeconds = 0.0166666667)
         {
             this.ctrl = ctrl;

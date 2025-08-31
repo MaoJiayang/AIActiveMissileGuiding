@@ -57,8 +57,6 @@ namespace IngameScript
         public Vector3D 上次真实目标位置;// AI块的“每帧”
         public bool 角度误差在容忍范围内;
 
-        // 只更新一次
-        public double 陀螺仪最高转速;
         // 计算密集型，每隔一段时间（动力系统更新间隔）更新或按需更新
         public Vector3D 制导命令;
         public double 导弹最大过载;
@@ -82,7 +80,6 @@ namespace IngameScript
             角度误差在容忍范围内 = false;
             导航常数 = 3.0; // 默认值，会在初始化时设置
             等待二阶段引爆 = false;
-            陀螺仪最高转速 = 2 * Math.PI;
             导弹状态信息 = new StringBuilder();
             上次预测目标位置 = Vector3D.Zero;
         }

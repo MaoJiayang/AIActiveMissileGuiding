@@ -40,10 +40,7 @@ namespace IngameScript
         private long 上次目标更新时间 = 0;
         private int 预测开始帧数 = 0;
         private int 热发射开始帧数 = 0;
-        
         private short 初始化计数器 = 0;
-        
-
         MovingAverageQueue<Vector3D> 外源扰动缓存 = new MovingAverageQueue<Vector3D>(
             20,
             (a, b) => a + b,
@@ -69,7 +66,7 @@ namespace IngameScript
 
         // 控制组件
         private IMyControllerCompat 控制器;
-        private List<IMyThrust> 推进器列表 = new List<IMyThrust>();
+        private 推进系统 推进器系统;
         private 陀螺仪瞄准系统 陀螺仪;
         private List<IMyGravityGeneratorBase> 重力发生器列表 = new List<IMyGravityGeneratorBase>();
         // 引爆系统组件（可选）
@@ -87,22 +84,6 @@ namespace IngameScript
         // 氢气罐系统组件（可选）
         private List<IMyGasTank> 氢气罐列表 = new List<IMyGasTank>();
         private bool 氢气罐系统可用 = false;
-
-        // 分离推进器（可选）
-        private List<IMyThrust> 分离推进器列表 = new List<IMyThrust>();
-
-        // 推进器分组映射表
-        private Dictionary<string, List<IMyThrust>> 推进器推力方向组 = new Dictionary<string, List<IMyThrust>>
-        {
-            {"XP", new List<IMyThrust>()}, {"XN", new List<IMyThrust>()},
-            {"YP", new List<IMyThrust>()}, {"YN", new List<IMyThrust>()},
-            {"ZP", new List<IMyThrust>()}, {"ZN", new List<IMyThrust>()}
-        };
-        private Dictionary<string, double> 轴向最大推力 = new Dictionary<string, double>
-        {
-            {"XP", 0}, {"XN", 0}, {"YP", 0}, {"YN", 0}, {"ZP", 0}, {"ZN", 0}
-        };
-        private bool 推进器已分类 = false;
 
         #endregion
 
@@ -131,15 +112,13 @@ namespace IngameScript
             导弹状态信息 = new 导弹状态量();
             参数们 = new 参数管理器(Me);
             陀螺仪 = new 陀螺仪瞄准系统(参数们, Me);
+            推进器系统 = new 推进系统(参数们, Me);
 
             // 初始化目标跟踪器
             目标跟踪器 = new TargetTracker(参数们.目标历史最大长度);
 
             // 初始化导航常数
             导弹状态信息.导航常数 = 参数们.导航常数初始值;
-
-            // 陀螺仪的最大命令值
-            导弹状态信息.陀螺仪最高转速 = Me.CubeGrid.GridSizeEnum == MyCubeSize.Large ? Math.PI : 2 * Math.PI;
 
             // 设置更新频率为每tick执行
             Runtime.UpdateFrequency = UpdateFrequency.Update1;
@@ -406,14 +385,7 @@ namespace IngameScript
                     战斗块.ApplyAction("ActivateBehavior_Off");
                 }
 
-                // 关闭所有推进器
-                foreach (var 推进器 in 推进器列表)
-                {
-                    推进器.ThrustOverride = 0f;
-                    推进器.Enabled = false;
-                }
-
-                // 关闭陀螺仪
+                推进器系统.关机();
                 陀螺仪.重置();
 
                 // 关闭重力发生器
@@ -466,17 +438,8 @@ namespace IngameScript
                 // }
 
                 // 只启用分离推进器，其他推进器保持关闭
-                foreach (var 推进器 in 推进器列表)
-                {
-                    推进器.Enabled = false;
-                    推进器.ThrustOverride = 0f;
-                }
+                推进器系统.分离推进();
 
-                foreach (var 分离推进器 in 分离推进器列表)
-                {
-                    分离推进器.Enabled = true;
-                    分离推进器.ThrustOverride = 分离推进器.MaxThrust; // 全力推进
-                }
                 foreach (var 挂架组件 in 连接器列表)
                 {
                     挂架组件.Enabled = false; // 禁用挂架组件
@@ -512,11 +475,8 @@ namespace IngameScript
             }
 
             // 启用所有推进器
-            foreach (var 推进器 in 推进器列表)
-            {
-                推进器.Enabled = true;
-                推进器.ThrustOverride = 0f; // 重置推力覆盖
-            }
+            推进器系统.开机();
+
 
             // 启用陀螺仪 实际上不需要，热发射时启动过了
             // foreach (var 陀螺仪 in 陀螺仪列表)
@@ -555,10 +515,7 @@ namespace IngameScript
             {
                 战斗块.UpdateTargetInterval = 参数们.战斗块更新间隔_搜索; // 恢复战斗块更新目标间隔          
                 // 停止所有推进器
-                foreach (var 推进器 in 推进器列表)
-                {
-                    推进器.ThrustOverride = 0f;
-                }
+                推进器系统.关机();
                 // 停止陀螺仪覆盖
                 陀螺仪.重置();
                 目标跟踪器.ClearHistory();// 清空目标历史
@@ -682,8 +639,7 @@ namespace IngameScript
                     return false;
 
                 case 6: // Stage 3: 获取推进器
-                    推进器列表.Clear();
-                    方块组.GetBlocksOfType(推进器列表);
+                    推进器系统.初始化(方块组, 控制器);
                     return false;
 
                 case 8: // Stage 4: 初始化陀螺仪系统
@@ -707,15 +663,11 @@ namespace IngameScript
                     初始化氢气罐系统(方块组);
                     return false;
 
-                case 18: // Stage 9: 初始化分离推进器
-                    初始化分离推进器();
-                    return false;
-
-                case 20: // Stage 10: 初始化AI组件并完成
-                    bool 初始化完整 = 配置AI组件(方块组) && 控制器 != null && 推进器列表.Count > 0 && 陀螺仪.已初始化;
+                case 18: // Stage 9: 初始化AI组件并完成
+                    bool 初始化完整 = 配置AI组件(方块组) && 控制器 != null && 推进器系统.已初始化 && 陀螺仪.已初始化;
                     if (初始化完整)
                     {
-                        分类推进器(控制器);
+                        // 分类推进器(控制器);
                         计算接近加速度并外力补偿(控制器.WorldMatrix.Forward * 1000, 控制器.WorldMatrix.Forward, 控制器);// 无意义，只是为了获取导弹的最大可能加速度
                         // Echo($"视线方向:{控制器.WorldMatrix.Forward * 1000}");
                         // Echo($"虚构(加速度指令):{控制器.WorldMatrix.Forward}");
@@ -723,7 +675,7 @@ namespace IngameScript
                     }
                     else
                     {
-                        初始化消息.AppendLine($"硬件初始化不完整: 控制器={控制器?.CustomName}, 推进器={推进器列表.Count}, 陀螺仪={陀螺仪.初始化消息}");
+                        初始化消息.AppendLine($"硬件初始化不完整: 控制器={控制器?.CustomName}, {推进器系统.初始化消息}, {陀螺仪.初始化消息}");
                         初始化消息.AppendLine($"或缺少AI组件，请检查");
                         Echo(初始化消息.ToString());
                         初始化消息.Clear();
@@ -828,29 +780,6 @@ namespace IngameScript
             氢气罐列表.Clear();
             方块组.GetBlocksOfType(氢气罐列表);
             氢气罐系统可用 = 氢气罐列表.Count > 0;
-        }
-
-        /// <summary>
-        /// 初始化分离推进器（可选功能，通过名称识别）
-        /// </summary>
-        private void 初始化分离推进器()
-        {
-            // 清空分离推进器列表
-            分离推进器列表.Clear();
-
-            // 根据名称识别分离推进器
-            foreach (var 推进器 in 推进器列表)
-            {
-                string 名称 = 推进器.CustomName.ToLower();
-                if (名称.Contains(参数们.分离推进器名称))
-                {
-                    分离推进器列表.Add(推进器);
-                }
-            }
-            if (分离推进器列表.Count == 0)
-            {
-                分离推进器列表 = 推进器推力方向组["ZN"]; // 默认使用ZN推力方向的推进器
-            }
         }
 
         /// <summary>
@@ -1009,7 +938,7 @@ namespace IngameScript
             // 控制陀螺仪
             陀螺仪.方向瞄准(加速度命令);
             // 控制推进器
-            控制推进器(加速度命令, 控制器);
+            推进器系统.控制推进器(加速度命令);
         }
 
         /// <summary>
@@ -1150,7 +1079,7 @@ namespace IngameScript
             Vector3D 最终最大过载向量 = Vector3D.Zero;
             Vector3D 最终加速度指令 = Vector3D.Zero;
             Vector3D 当前Cmd方向 = Vector3D.Normalize(比例导航加速度 + 参数们.最小接近加速度 * 视线单位向量);
-
+            var 轴向最大推力 = 推进器系统.轴向最大推力;
             for (int i = 0; i < 2; i++)
             {
                 // Step1: 当前Cmd方向下的最大加速度
@@ -1289,173 +1218,7 @@ namespace IngameScript
 
         #endregion
 
-        #region 飞行控制系统
-
-        /// <summary>
-        /// 控制推进器产生所需加速度
-        /// </summary>
-        private void 控制推进器(Vector3D 绝对加速度, IMyControllerCompat 控制器)
-        {
-            if (更新计数器 % 参数们.动力系统更新间隔 != 0)
-                return;
-            // 获取飞船质量（单位：kg）
-            double 飞船质量 = 控制器.CalculateShipMass().PhysicalMass;
-
-            // 将绝对加速度转换为飞船本地坐标系（单位：m/s²）
-            Vector3D 本地加速度 = Vector3D.TransformNormal(绝对加速度, MatrixD.Transpose(控制器.WorldMatrix));
-
-            // 仅在第一次调用或推进器列表发生变化时进行分类
-            if (!推进器已分类 || 更新计数器 % 参数们.推进器重新分类间隔 == 0)
-            {
-                分类推进器(控制器);
-                推进器已分类 = true;
-            }
-
-            // 针对每个轴应用推力控制
-            Vector3D 实际应用推力;
-            实际应用推力.X = 应用轴向推力(本地加速度.X, "XP", "XN", 飞船质量);
-            实际应用推力.Y = 应用轴向推力(本地加速度.Y, "YP", "YN", 飞船质量);
-            实际应用推力.Z = 应用轴向推力(本地加速度.Z, "ZP", "ZN", 飞船质量);
-
-            // // 将本地加速度转换回世界坐标系
-            // 导弹状态信息.导弹世界力学加速度 = Vector3D.TransformNormal(实际应用推力 / 飞船质量, 控制器.WorldMatrix);
-            // Echo($"[推进器] 动力学加速度夹角 {Vector3D.Angle(导弹状态信息.导弹世界力学加速度,控制器.GetAcceleration()):n2}");
-
-        }
-
-
-        /// <summary>
-        /// 将推进器按方向分类并保存各轴向最大推力
-        /// </summary>
-        private void 分类推进器(IMyControllerCompat 控制器)
-        {
-            // 清空所有组中的推进器和推力记录
-            foreach (var key in 推进器推力方向组.Keys.ToList())
-            {
-                推进器推力方向组[key].Clear();
-                轴向最大推力[key] = 0;
-            }
-
-            // 遍历所有推进器，根据其局部推进方向归类
-            foreach (var 推进器 in 推进器列表)
-            {
-                // 将推进器的推力方向（正面是喷口，反方向是推力方向）转换到飞船本地坐标系
-                Vector3D 推进器推力方向 = 推进器.WorldMatrix.Backward;
-                // Vector3D 本地推力方向 = Vector3D.TransformNormal(推进器.WorldMatrix.Backward, MatrixD.Transpose(控制器.WorldMatrix));
-                // 根据推进方向分类并累加推力
-                string 分类轴向 = null;
-                if (Vector3D.Dot(推进器推力方向, 控制器.WorldMatrix.Right) > 参数们.推进器方向容差)
-                    分类轴向 = "XP";
-                else if (Vector3D.Dot(推进器推力方向, -控制器.WorldMatrix.Right) > 参数们.推进器方向容差)
-                    分类轴向 = "XN";
-                else if (Vector3D.Dot(推进器推力方向, 控制器.WorldMatrix.Up) > 参数们.推进器方向容差)
-                    分类轴向 = "YP";
-                else if (Vector3D.Dot(推进器推力方向, -控制器.WorldMatrix.Up) > 参数们.推进器方向容差)
-                    分类轴向 = "YN";
-                else if (Vector3D.Dot(推进器推力方向, 控制器.WorldMatrix.Forward) > 参数们.推进器方向容差)
-                    分类轴向 = "ZN";
-                else if (Vector3D.Dot(推进器推力方向, -控制器.WorldMatrix.Forward) > 参数们.推进器方向容差)
-                    分类轴向 = "ZP";
-                Echo($"[推进器] 推进器 {推进器.CustomName} 分类为 {分类轴向}");
-                if (分类轴向 != null)
-                {
-                    推进器推力方向组[分类轴向].Add(推进器);
-                    轴向最大推力[分类轴向] += 推进器.MaxEffectiveThrust;
-                }
-            }
-
-            // 对每个方向组内的推进器按最大有效推力从大到小排序
-            foreach (var 组 in 推进器推力方向组.Values)
-            {
-                组.Sort((a, b) => b.MaxEffectiveThrust.CompareTo(a.MaxEffectiveThrust));
-            }
-
-            推进器已分类 = true;
-
-        }
-
-        /// <summary>
-        /// 为指定轴应用推力控制
-        /// </summary>
-        private double 应用轴向推力(double 本地加速度, string 正方向组, string 负方向组, double 质量)
-        {
-            // 计算所需力（牛顿）
-            double 需要的力 = 质量 * Math.Abs(本地加速度);
-
-            // 确定应该使用哪个方向的推进器组
-            string 激活组名 = 本地加速度 >= 0 ? 正方向组 : 负方向组;
-            string 关闭组名 = 本地加速度 >= 0 ? 负方向组 : 正方向组;
-
-            // 首先关闭反方向的推进器组
-            List<IMyThrust> 关闭组;
-            if (推进器推力方向组.TryGetValue(关闭组名, out 关闭组))
-            {
-                foreach (var 推进器 in 关闭组)
-                {
-                    推进器.ThrustOverride = 0f;
-                }
-            }
-            // 获取对应方向的推进器组（已排序）
-            List<IMyThrust> 推进器组;
-            if (!推进器推力方向组.TryGetValue(激活组名, out 推进器组) || 推进器组.Count == 0)
-            {
-                return 0.0; // 该方向没有推进器
-            }
-
-            // 推进器已在分类时排序，无需重新排序
-            // 追踪剩余需要分配的推力和已分配的推力
-            double 剩余力 = 需要的力;
-            double 总分配力 = 0;
-
-            // 将推进器按照相似推力分组处理
-            int 当前索引 = 0;
-            while (当前索引 < 推进器组.Count && 剩余力 > 0.001)
-            {
-                // 当前组的参考推力值
-                double 参考推力 = 推进器组[当前索引].MaxEffectiveThrust;
-
-                // 查找相似推力的推进器并计算组总推力
-                int 组大小 = 0;
-                double 组最大推力 = 0;
-                int i = 当前索引;
-
-                // 识别具有相似最大推力的推进器组
-                while (i < 推进器组.Count &&
-                    Math.Abs(推进器组[i].MaxEffectiveThrust - 参考推力) < 0.001)
-                {
-                    组最大推力 += 推进器组[i].MaxEffectiveThrust;
-                    组大小++;
-                    i++;
-                }
-
-                // 确定分配给该组的推力
-                double 分配给组的推力 = Math.Min(组最大推力, 剩余力);
-
-                // 在组内均匀分配推力
-                double 每个推进器推力 = 分配给组的推力 / 组大小;
-                for (int j = 当前索引; j < 当前索引 + 组大小; j++)
-                {
-                    double 实际分配推力 = Math.Min(每个推进器推力, 推进器组[j].MaxEffectiveThrust);
-                    推进器组[j].ThrustOverride = (float)实际分配推力;
-                    剩余力 -= 实际分配推力;
-                    总分配力 += 实际分配推力;
-                }
-
-                // 移动到下一组推进器
-                当前索引 = i;
-            }
-            // // 输出调试信息
-            // if (需要的力 > 总分配力 + 0.001)
-            // {
-            //     Echo($"[推进器] 轴向 {激活组名}推力缺口");
-            // }
-            // 关闭剩余的推进器
-            for (int i = 当前索引; i < 推进器组.Count; i++)
-            {
-                推进器组[i].ThrustOverride = 0f;
-            }
-            return 本地加速度 > 0 ? 总分配力 : -总分配力;
-        }
+        #region 飞行测试系统
 
         /// <summary>
         /// 测试陀螺仪控制
@@ -1532,10 +1295,7 @@ namespace IngameScript
                     // 停止陀螺仪覆盖
                     陀螺仪.重置();
                     // 停止推进器
-                    foreach (var 推进器 in 推进器列表)
-                    {
-                        推进器.ThrustOverride = 0f;
-                    }
+                    推进器系统.关机();
                     return; // 停止命令直接返回，不执行后续控制逻辑
                 }
 

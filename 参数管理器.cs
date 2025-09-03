@@ -12,7 +12,7 @@ namespace IngameScript
     /// </summary>
     public class 参数管理器
     {
-        public string 版本号 { get; } = "1.1.3";
+        public string 版本号 { get; } = "1.1.4";
         #region 制导相关参数
         /// <summary>
         /// 向量最小有效长度
@@ -691,6 +691,7 @@ namespace IngameScript
 
                     // 添加参数配置行
                     配置.AppendLine($"{参数名} = {参数值}");
+                    配置.AppendLine();
                 }
             }
 

@@ -67,7 +67,7 @@ namespace IngameScript
             this.参考驾驶舱 = 参考驾驶舱;
             初始化PID控制器();
             内部时钟 = -1; // 初始化时钟为-1，第一次调用Update时会自动更新
-            重置();          
+            关机();          
         }
         private void 初始化PID控制器()
         {
@@ -97,7 +97,7 @@ namespace IngameScript
         {
             瞄准(目标点 - 参考驾驶舱.GetPosition());
         }
-        public void 重置()
+        public void 关机()
         {
             if(内部时钟 == 0) return; // 如果已经重置过则不再执行
             // 重置所有PID控制器
@@ -108,7 +108,19 @@ namespace IngameScript
             // 停止所有陀螺仪
             foreach (var 陀螺仪 in 陀螺仪列表)
             {
+                陀螺仪.Enabled = false;
                 陀螺仪.GyroOverride = false;
+                陀螺仪.Pitch = 0;
+                陀螺仪.Yaw = 0;
+                陀螺仪.Roll = 0;
+            }
+        }
+        public void 开机()
+        {
+            foreach (var 陀螺仪 in 陀螺仪列表)
+            {
+                陀螺仪.Enabled = true;
+                陀螺仪.GyroOverride = true;
                 陀螺仪.Pitch = 0;
                 陀螺仪.Yaw = 0;
                 陀螺仪.Roll = 0;

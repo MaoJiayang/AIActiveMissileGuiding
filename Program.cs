@@ -386,7 +386,7 @@ namespace IngameScript
                 }
 
                 推进器系统.关机();
-                陀螺仪.重置();
+                陀螺仪.关机();
 
                 // 关闭重力发生器
                 foreach (var 重力发生器 in 重力发生器列表)
@@ -426,7 +426,7 @@ namespace IngameScript
                         气罐.Stockpile = false; // 关闭储存模式（自动）
                     }
                 }
-
+                陀螺仪.开机();
                 // // 启用陀螺仪但不给指令
                 // foreach (var 陀螺仪 in 陀螺仪列表)
                 // {
@@ -436,7 +436,6 @@ namespace IngameScript
                 //     陀螺仪.Yaw = 0f;
                 //     陀螺仪.Roll = 0f;
                 // }
-
                 // 只启用分离推进器，其他推进器保持关闭
                 推进器系统.分离推进();
 
@@ -514,10 +513,10 @@ namespace IngameScript
             if (目标跟踪器.GetHistoryCount() > 0 || 更新计数器 < 60)
             {
                 战斗块.UpdateTargetInterval = 参数们.战斗块更新间隔_搜索; // 恢复战斗块更新目标间隔          
-                // 停止所有推进器
-                推进器系统.关机();
-                // 停止陀螺仪覆盖
-                陀螺仪.重置();
+                // // 停止所有推进器
+                // 推进器系统.关机();
+                // // 停止陀螺仪覆盖
+                // 陀螺仪.重置();
                 目标跟踪器.ClearHistory();// 清空目标历史
 
             }
@@ -1293,7 +1292,7 @@ namespace IngameScript
                 else if (argument == "stop")
                 {
                     // 停止陀螺仪覆盖
-                    陀螺仪.重置();
+                    陀螺仪.关机();
                     // 停止推进器
                     推进器系统.关机();
                     return; // 停止命令直接返回，不执行后续控制逻辑

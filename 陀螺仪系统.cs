@@ -69,6 +69,16 @@ namespace IngameScript
             内部时钟 = -1; // 初始化时钟为-1，第一次调用Update时会自动更新
             关机();          
         }
+        
+        public void 初始化(List<IMyGyro> 陀螺仪列表, IMyControllerCompat 参考驾驶舱)
+        {
+            this.陀螺仪列表 = 陀螺仪列表;
+            this.参考驾驶舱 = 参考驾驶舱;
+            初始化PID控制器();
+            内部时钟 = -1; // 初始化时钟为-1，第一次调用Update时会自动更新
+            关机();
+        }
+
         private void 初始化PID控制器()
         {
             double pid时间常数 = 参数们.获取PID时间常数();

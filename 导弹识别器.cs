@@ -77,67 +77,6 @@ namespace IngameScript
         }
 
         /// <summary>
-        /// 获取遍历过程中发现的所有终端方块
-        /// 只有在遍历完成后才返回结果，否则不添加任何方块到列表
-        /// </summary>
-        /// <param name="blocks">结果列表，符合条件的方块将被添加到此列表</param>
-        /// <param name="collect">可选的筛选条件，如果为null则获取所有终端方块</param>
-        public void GetBlocks(List<IMyTerminalBlock> blocks, Func<IMyTerminalBlock, bool> collect = null)
-        {
-            if (blocks == null)
-                throw new ArgumentNullException(nameof(blocks));
-
-            // 确保完全初始化且遍历完成
-            if (!isInitialized || queue == null || queue.Count > 0)
-            {
-                return; // 遍历未完成，不添加任何结果
-            }
-
-            // 遍历所有发现的终端方块
-            foreach (var terminalBlock in 遍历结果列表)
-            {
-                // 应用筛选条件（如果有）
-                if (collect == null || collect(terminalBlock))
-                {
-                    blocks.Add(terminalBlock);
-                }
-            }
-        }
-
-        /// <summary>
-        /// 获取指定类型的方块并添加到列表中
-        /// </summary>
-        /// <typeparam name="T">要筛选的方块类型</typeparam>
-        /// <param name="blocks">结果列表，符合条件的方块将被添加到此列表</param>
-        /// <param name="collect">可选的筛选条件，如果为null则获取所有T类型的方块</param>
-        public void GetBlocksOfType<T>(List<T> blocks, Func<T, bool> collect = null) where T : class
-        {
-            if (blocks == null)
-                throw new ArgumentNullException(nameof(blocks));
-
-            // 确保遍历已完成
-            if (!isInitialized || queue == null || queue.Count > 0)
-            {
-                return; // 遍历未完成，不返回任何结果
-            }
-
-            // 遍历所有发现的终端方块
-            foreach (var terminalBlock in 遍历结果列表)
-            {
-                // 尝试转换为目标类型
-                T block = terminalBlock as T;
-                if (block != null)
-                {
-                    // 应用筛选条件（如果有）
-                    if (collect == null || collect(block))
-                    {
-                        blocks.Add(block);
-                    }
-                }
-            }
-        }
-
-        /// <summary>
         /// 导弹识别器构造函数
         /// </summary>
         /// <param name="指定方块组">方块组，仅在当前组内搜索</param>
@@ -274,6 +213,67 @@ namespace IngameScript
         }
 
         /// <summary>
+        /// 获取遍历过程中发现的所有终端方块
+        /// 只有在遍历完成后才返回结果，否则不添加任何方块到列表
+        /// </summary>
+        /// <param name="blocks">结果列表，符合条件的方块将被添加到此列表</param>
+        /// <param name="collect">可选的筛选条件，如果为null则获取所有终端方块</param>
+        public void GetBlocks(List<IMyTerminalBlock> blocks, Func<IMyTerminalBlock, bool> collect = null)
+        {
+            if (blocks == null)
+                throw new ArgumentNullException(nameof(blocks));
+
+            // 确保完全初始化且遍历完成
+            if (!isInitialized || queue == null || queue.Count > 0)
+            {
+                return; // 遍历未完成，不添加任何结果
+            }
+
+            // 遍历所有发现的终端方块
+            foreach (var terminalBlock in 遍历结果列表)
+            {
+                // 应用筛选条件（如果有）
+                if (collect == null || collect(terminalBlock))
+                {
+                    blocks.Add(terminalBlock);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 获取指定类型的方块并添加到列表中
+        /// </summary>
+        /// <typeparam name="T">要筛选的方块类型</typeparam>
+        /// <param name="blocks">结果列表，符合条件的方块将被添加到此列表</param>
+        /// <param name="collect">可选的筛选条件，如果为null则获取所有T类型的方块</param>
+        public void GetBlocksOfType<T>(List<T> blocks, Func<T, bool> collect = null) where T : class
+        {
+            if (blocks == null)
+                throw new ArgumentNullException(nameof(blocks));
+
+            // 确保遍历已完成
+            if (!isInitialized || queue == null || queue.Count > 0)
+            {
+                return; // 遍历未完成，不返回任何结果
+            }
+
+            // 遍历所有发现的终端方块
+            foreach (var terminalBlock in 遍历结果列表)
+            {
+                // 尝试转换为目标类型
+                T block = terminalBlock as T;
+                if (block != null)
+                {
+                    // 应用筛选条件（如果有）
+                    if (collect == null || collect(block))
+                    {
+                        blocks.Add(block);
+                    }
+                }
+            }
+        }
+        
+        /// <summary>
         /// 处理终端方块：添加到结果列表并标记
         /// </summary>
         /// <param name="termBlock">要处理的终端方块</param>
@@ -285,7 +285,7 @@ namespace IngameScript
                 // 方块被排除，不加入到结果列表，但允许继续遍历
                 return;
             }
-    
+
             // 将终端方块添加到发现列表中（避免重复添加）
             if (!遍历结果列表.Contains(termBlock))
             {

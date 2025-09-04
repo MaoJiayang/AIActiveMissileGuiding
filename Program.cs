@@ -31,7 +31,7 @@ namespace IngameScript
         // 参数管理器实例
         private 参数管理器 参数们;
 
-        private 导弹识别器 导弹编组;
+        private 导弹识别器 方块组;
 
         #endregion
 
@@ -60,7 +60,7 @@ namespace IngameScript
 
         #region 硬件组件
         private bool 已经初始化 = false;
-        private IMyBlockGroup 方块组 = null;
+        // private IMyBlockGroup 方块组 = null;
 
         // AI组件
         private IMyFlightMovementBlock 飞行块;
@@ -115,7 +115,7 @@ namespace IngameScript
             参数们 = new 参数管理器(Me);
             陀螺仪 = new 陀螺仪瞄准系统(参数们, Me);
             推进器系统 = new 推进系统(参数们, Me);
-            导弹编组 = new 导弹识别器(参数们, Me, Echo);
+            方块组 = new 导弹识别器(参数们, Me, Echo);
             // 初始化目标跟踪器
             目标跟踪器 = new TargetTracker(参数们.目标历史最大长度);
 
@@ -124,7 +124,7 @@ namespace IngameScript
 
             // 设置更新频率为每tick执行
             Runtime.UpdateFrequency = UpdateFrequency.Update1;
-            已经初始化 = 初始化硬件();
+            // 已经初始化 = 初始化硬件();
         }
 
         public void Main(string argument, UpdateType updateSource)
@@ -134,6 +134,13 @@ namespace IngameScript
             if (!已经初始化)
             {
                 Echo("尝试硬件初始化...");
+                if (!方块组.IsTraversalComplete)
+                {
+                    Echo("识别网格中...");
+                    方块组.遍历(maxProcessCount: 36); // 每次调用处理36格
+                    Echo($"{方块组.遍历状态}");
+                    return;
+                }
                 已经初始化 = 初始化硬件();
                 if (已经初始化 && !挂架系统可用)
                 {
@@ -246,7 +253,7 @@ namespace IngameScript
                 }
                 else if (argument.ToLower() == "detonate")
                 {
-                    if(导弹保险解除) 导弹状态信息.当前状态 = 导弹状态机.引爆激发;
+                    if (导弹保险解除) 导弹状态信息.当前状态 = 导弹状态机.引爆激发;
                     return;
                 }
                 else if (argument.ToLower() == "standby")
@@ -265,6 +272,11 @@ namespace IngameScript
                 else if (argument.ToLower() == "arm")
                 {
                     参数们.手动保险超控 = true;
+                    return;
+                }
+                else if (argument.ToLower() == "save")
+                {
+                    方块组.重新框定();
                     return;
                 }
             }
@@ -449,6 +461,10 @@ namespace IngameScript
                 {
                     挂架组件.Enabled = false; // 禁用挂架组件
                 }
+                foreach (var 挂架组件 in 转子列表)
+                {
+                    挂架组件.Detach();
+                }
                 // 转子不动，可能需要超限
             }
 
@@ -587,32 +603,32 @@ namespace IngameScript
             {
                 case 2: // Stage 1: 寻找包含当前可编程块的方块组
                     已经初始化 = false;
-                    if (!已经初始化)
-                    {
-                        List<IMyBlockGroup> 所有组 = new List<IMyBlockGroup>();
-                        GridTerminalSystem.GetBlockGroups(所有组);
-                        foreach (var 组 in 所有组)
-                        {
-                            // 检查组名是否以指定组名开头
-                            if (组.Name.StartsWith(参数们.组名前缀))
-                            {
-                                // 检查该组是否包含当前可编程块
-                                List<IMyTerminalBlock> 组内方块 = new List<IMyTerminalBlock>();
-                                组.GetBlocks(组内方块);
+                    // if (!已经初始化)
+                    // {
+                    //     List<IMyBlockGroup> 所有组 = new List<IMyBlockGroup>();
+                    //     GridTerminalSystem.GetBlockGroups(所有组);
+                    //     foreach (var 组 in 所有组)
+                    //     {
+                    //         // 检查组名是否以指定组名开头
+                    //         if (组.Name.StartsWith(参数们.组名前缀))
+                    //         {
+                    //             // 检查该组是否包含当前可编程块
+                    //             List<IMyTerminalBlock> 组内方块 = new List<IMyTerminalBlock>();
+                    //             组.GetBlocks(组内方块);
 
-                                if (组内方块.Contains(Me))
-                                {
-                                    方块组 = 组;
-                                    break;
-                                }
-                            }
-                        }
-                        if (方块组 == null)
-                        {
-                            Echo($"未找到包含当前可编程块的、以'{参数们.组名前缀}'开头的方块组");
-                            return false;
-                        }
-                    }
+                    //             if (组内方块.Contains(Me))
+                    //             {
+                    //                 方块组 = 组;
+                    //                 break;
+                    //             }
+                    //         }
+                    //     }
+                    //     if (方块组 == null)
+                    //     {
+                    //         Echo($"未找到包含当前可编程块的、以'{参数们.组名前缀}'开头的方块组");
+                    //         return false;
+                    //     }
+                    // }
                     return false;
 
                 case 4: // Stage 2: 获取控制器
@@ -697,7 +713,7 @@ namespace IngameScript
         /// <summary>
         /// 初始化引爆系统（可选功能，不满足条件不报错）
         /// </summary>
-        private void 初始化引爆系统(IMyBlockGroup 方块组)
+        private void 初始化引爆系统(导弹识别器 方块组)
         {
             try
             {
@@ -754,7 +770,7 @@ namespace IngameScript
         /// <summary>
         /// 初始化挂架系统（可选功能，不满足条件不报错）
         /// </summary>
-        private void 初始化挂架系统(IMyBlockGroup 方块组)
+        private void 初始化挂架系统(导弹识别器 方块组)
         {
             // 获取连接器
             连接器列表.Clear();
@@ -775,7 +791,7 @@ namespace IngameScript
         /// <summary>
         /// 初始化气罐系统（可选功能，不满足条件不报错）
         /// </summary>
-        private void 初始化氢气罐系统(IMyBlockGroup 方块组)
+        private void 初始化氢气罐系统(导弹识别器 方块组)
         {
             // 获取所有气罐
             氢气罐列表.Clear();
@@ -824,7 +840,7 @@ namespace IngameScript
         /// <summary>
         /// 配置AI组件
         /// </summary>
-        private bool 配置AI组件(IMyBlockGroup 方块组)
+        private bool 配置AI组件(导弹识别器 方块组)
         {
             if (方块组 == null)
             {

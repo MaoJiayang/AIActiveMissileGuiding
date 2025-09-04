@@ -1,25 +1,11 @@
-using Sandbox.Game.EntityComponents;
 using Sandbox.ModAPI.Ingame;
-using Sandbox.ModAPI.Interfaces;
-using SpaceEngineers.Game.ModAPI.Ingame;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
-using System.Reflection;
-using System.Text;
-using VRage;
-using VRage.Collections;
 using VRage.Game;
-using VRage.Game.Components;
-using VRage.Game.Components.Interfaces;
-using VRage.Game.GUI.TextPanel;
 using VRage.Game.ModAPI.Ingame;
-using VRage.Game.ModAPI.Ingame.Utilities;
-using VRage.Game.ObjectBuilders.Definitions;
-using VRage.ObjectBuilders;
 using VRageMath;
+using Vector2 = VRageMath.Vector2;
 namespace IngameScript
 {
     // 1. 定义兼容接口
@@ -97,12 +83,16 @@ namespace IngameScript
         /// 更新位置和速度（BlockMotionTracker需定期调用，真实控制器可为空实现）。
         /// </summary>
         void Update();
+        IMyCubeGrid CubeGrid { get; }
+        double RollIndicator { get; }
+        Vector2 RotationIndicator { get; }
     }
 
     // 2. BlockMotionTracker 实现接口
     public class BlockMotionTracker : IMyControllerCompat
     {
         private IMyTerminalBlock block;
+        private MyCubeSize _gridSize;
         private double updateIntervalSeconds;
         private MatrixD LastWorldMatrix;
         private Vector3D LastLinearVelocity;
@@ -111,18 +101,21 @@ namespace IngameScript
         private Vector3D LinearAcceleration;
         private Action<string> Echo;
         private MyShipMass _缓存质量 = new MyShipMass(-1, -1, -1);
+        private Vector3I 方块空间占用 = Vector3I.Zero;
         public string CustomName { get { return block.CustomName; } }
         public MatrixD WorldMatrix { get { return block.WorldMatrix; } }
 
         public BlockMotionTracker(IMyTerminalBlock block, double updateIntervalSeconds = 0.0166666667, Action<string> Echo = null)
         {
             this.block = block;
+            this._gridSize = block.CubeGrid.GridSizeEnum;
             this.updateIntervalSeconds = Math.Max(1e-6, updateIntervalSeconds);
             this.LastWorldMatrix = block.WorldMatrix;
             this.LastLinearVelocity = block.CubeGrid.LinearVelocity;
             this.LinearVelocity = block.CubeGrid.LinearVelocity;
             this.AngularVelocity = Vector3D.Zero;
             this.Echo = Echo ?? (msg => { }); // 默认空实现，避免空引用异常
+            Update(); // 初始化时更新一次位置和速度
         }
 
         /// <summary>
@@ -133,20 +126,24 @@ namespace IngameScript
             UpdateAcceleration();
             UpdateAngularVelocity();
         }
-
+        public Vector3D GetAcceleration() { return LinearAcceleration; }
+        // 以下重力获取相关内容没有被实现，请使用差分计算重力。
         public Vector3D GetNaturalGravity() { return Vector3D.Zero; }
         public Vector3D GetArtificialGravity() { return Vector3D.Zero; }
         public Vector3D GetTotalGravity() { return GetNaturalGravity() + GetArtificialGravity(); }
         public double GetShipSpeed() { return LinearVelocity.Length(); }
         public MyShipVelocities GetShipVelocities() { return new MyShipVelocities(block.CubeGrid.LinearVelocity, AngularVelocity); }
+        public IMyCubeGrid CubeGrid { get { return block.CubeGrid; } }
+        public double RollIndicator { get { return 0; } }// 普通方块无法获取
+        public Vector2 RotationIndicator { get { return Vector2.Zero; } }// 普通方块无法获取
         public MyShipMass CalculateShipMass()
         {
-            // 如果缓存有效，直接返回
-            if (_缓存质量.PhysicalMass >= 0)
-                return _缓存质量;
             IMyCubeGrid grid = block.CubeGrid;
             Vector3I min = grid.Min;
             Vector3I max = grid.Max;
+            // 如果缓存有效，直接返回
+            if (_缓存质量.PhysicalMass >= 0 && 方块空间占用 == max - min)
+                return _缓存质量;
             float totalMass = 0f;
             var visited = new HashSet<IMySlimBlock>();
             for (int x = min.X; x <= max.X; x++)
@@ -161,14 +158,16 @@ namespace IngameScript
                         }
                         if (slim == null)
                         {
-                            totalMass += 20f; // 假设每个空位置的质量为20kg,一个轻甲块的质量
+                            if (_gridSize == MyCubeSize.Large)
+                                totalMass += 500f; //
+                            else totalMass += 20f; // 假设每个空位置的质量为一个轻甲块的质量
                         }
                     }
             _缓存质量 = new MyShipMass(totalMass, totalMass, totalMass);
+            方块空间占用 = max - min;
             return _缓存质量;
         }
         public Vector3D GetPosition() { return block.GetPosition(); }
-        public Vector3D GetAcceleration() { return LinearAcceleration; }
         public bool IsFunctional { get { return block.IsFunctional; } }
         public bool Closed { get { return block.Closed; } }
 
@@ -194,6 +193,10 @@ namespace IngameScript
             deltaQuat.GetAxisAngle(out axis, out angle);
             if (angle > Math.PI)
                 angle = (angle + Math.PI) % (2 * Math.PI) - Math.PI;
+            if (Math.Abs(angle) < 1e-6) {
+                AngularVelocity = Vector3D.Zero;
+                return;
+            }
             Vector3D localAngularVelocity = axis * (angle / updateIntervalSeconds);
 
             // 转换到世界坐标系
@@ -222,6 +225,9 @@ namespace IngameScript
         public MatrixD WorldMatrix { get { return ctrl.WorldMatrix; } }
         public bool IsFunctional { get { return ctrl.IsFunctional; } }
         public bool Closed { get { return ctrl.Closed; } }
+        public IMyCubeGrid CubeGrid { get { return ctrl.CubeGrid; } }
+        public double RollIndicator { get { return ctrl.RollIndicator; } }
+        public Vector2 RotationIndicator { get { return ctrl.RotationIndicator; } }
         public ShipControllerAdapter(IMyShipController ctrl, double updateIntervalSeconds = 0.0166666667)
         {
             this.ctrl = ctrl;

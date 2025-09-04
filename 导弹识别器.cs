@@ -78,16 +78,30 @@ namespace IngameScript
 
         /// <summary>
         /// 获取遍历过程中发现的所有终端方块
-        /// 只有在遍历完成后才返回结果，否则返回null
+        /// 只有在遍历完成后才返回结果，否则不添加任何方块到列表
         /// </summary>
-        public List<IMyTerminalBlock> 获取可用方块()
+        /// <param name="blocks">结果列表，符合条件的方块将被添加到此列表</param>
+        /// <param name="collect">可选的筛选条件，如果为null则获取所有终端方块</param>
+        public void GetBlocks(List<IMyTerminalBlock> blocks, Func<IMyTerminalBlock, bool> collect = null)
         {
+            if (blocks == null)
+                throw new ArgumentNullException(nameof(blocks));
+
             // 确保完全初始化且遍历完成
             if (!isInitialized || queue == null || queue.Count > 0)
             {
-                return null;
+                return; // 遍历未完成，不添加任何结果
             }
-            return 遍历结果列表.ToList();
+
+            // 遍历所有发现的终端方块
+            foreach (var terminalBlock in 遍历结果列表)
+            {
+                // 应用筛选条件（如果有）
+                if (collect == null || collect(terminalBlock))
+                {
+                    blocks.Add(terminalBlock);
+                }
+            }
         }
 
         /// <summary>

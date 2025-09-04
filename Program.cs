@@ -31,6 +31,8 @@ namespace IngameScript
         // 参数管理器实例
         private 参数管理器 参数们;
 
+        private 导弹识别器 导弹编组;
+
         #endregion
 
         #region 状态变量
@@ -113,7 +115,7 @@ namespace IngameScript
             参数们 = new 参数管理器(Me);
             陀螺仪 = new 陀螺仪瞄准系统(参数们, Me);
             推进器系统 = new 推进系统(参数们, Me);
-
+            导弹编组 = new 导弹识别器(参数们, Me, Echo);
             // 初始化目标跟踪器
             目标跟踪器 = new TargetTracker(参数们.目标历史最大长度);
 

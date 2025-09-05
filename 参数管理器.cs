@@ -251,7 +251,6 @@ namespace IngameScript
         /// <summary>
         /// 导弹方块组名前缀
         /// </summary>
-        public string 组名前缀 { get; set; } = "导弹";
         public string 代理控制器前缀 { get; set; } = "代理";
 
         #endregion
@@ -270,6 +269,86 @@ namespace IngameScript
         private void 注册所有参数()
         {
             参数注册表 = new Dictionary<string, 参数描述符>();
+            // 命名配置
+            注册参数("代理控制器前缀",
+                () => 代理控制器前缀,
+                v => 代理控制器前缀 = v,
+                "代理控制器前缀");
+
+            注册参数("ExcludeTags",
+                获取值: () => ExcludeTags ?? "",
+                设置值: v => ExcludeTags = 解析字符串(v),
+                描述: "排除标签（逗号分隔列表），包含这些标签的方块将被排除在识别外",
+                空值时隐藏: true);
+
+            注册参数("分离推进器名称",
+                () => 分离推进器名称,
+                v => 分离推进器名称 = v,
+                "分离推进器识别标签");
+
+            // 引爆相关参数
+            注册参数("引爆距离阈值",
+                () => 引爆距离阈值.ToString(),
+                v => { double val; if (double.TryParse(v, out val)) 引爆距离阈值 = val; },
+                "接近引爆距离阈值(米)");
+
+            注册参数("碰炸解锁距离",
+                () => 碰炸解锁距离.ToString(),
+                v => { double val; if (double.TryParse(v, out val)) 碰炸解锁距离 = val; },
+                "碰炸解锁距离(米)(距离敌人)");
+
+            注册参数("碰炸迟缓度",
+                () => 碰炸迟缓度.ToString(),
+                v => { double val; if (double.TryParse(v, out val)) 碰炸迟缓度 = val; },
+                "碰炸迟缓度，越低越容易触发碰炸");
+
+            注册参数("手动保险超控",
+                () => 手动保险超控.ToString(),
+                v => { bool val; if (bool.TryParse(v, out val)) 手动保险超控 = val; },
+                "手动保险超控（允许在任何状态下引爆）");
+
+            // 热发射阶段相关参数
+            注册参数("热发射持续帧数",
+                () => 热发射持续帧数.ToString(),
+                v => { int val; if (int.TryParse(v, out val)) 热发射持续帧数 = val; },
+                "热发射阶段持续时间(帧数)");
+
+            注册参数("战斗块攻击模式",
+                () => 战斗块攻击模式.ToString(),
+                v => { int val; if (int.TryParse(v, out val)) 战斗块攻击模式 = val; },
+                "战斗块攻击模式");
+
+            注册参数("目标优先级",
+                () => 格式化目标优先级(目标优先级),
+                v => 目标优先级 = 解析目标优先级(v, 目标优先级),
+                "战斗块目标优先级(Closest,Largest,Smallest)");
+
+            // 动力系统相关参数
+            注册参数("常驻滚转转速",
+                () => 常驻滚转转速.ToString(),
+                v => { double val; if (double.TryParse(v, out val)) 常驻滚转转速 = val; },
+                "常驻滚转转速(弧度/秒)");
+
+            注册参数("动力系统更新间隔",
+                () => 动力系统更新间隔.ToString(),
+                v => { int val; if (int.TryParse(v, out val)) 动力系统更新间隔 = val; },
+                "动力系统更新间隔(ticks)");
+
+            // 状态切换时间参数
+            注册参数("战斗块更新间隔正常",
+                () => 战斗块更新间隔_搜索.ToString(),
+                v => { int val; if (int.TryParse(v, out val)) 战斗块更新间隔_搜索 = val; },
+                "战斗块更新目标间隔(搜索模式)");
+
+            注册参数("===警告==",
+                () => "",
+                v => {},
+                "请慎用以下参数，可能会引起不稳定");
+
+            注册参数("战斗块更新间隔跟踪",
+                () => 战斗块更新间隔_专注.ToString(),
+                v => { int val; if (int.TryParse(v, out val)) 战斗块更新间隔_专注 = val; },
+                "战斗块更新目标间隔(专注模式)");
 
             // 制导相关参数
             注册参数("最小向量长度",
@@ -312,15 +391,31 @@ namespace IngameScript
                 v => { bool val; if (bool.TryParse(v, out val)) 启用攻击角度约束 = val; },
                 "是否启用攻击角度约束");
 
-            注册参数("启用外力干扰",
-                () => 启用外力干扰.ToString(),
-                v => { bool val; if (bool.TryParse(v, out val)) 启用外力干扰 = val; },
-                "是否启用外力干扰计算");
+            // 注册 MeGridMax 参数
+            注册参数("MeGridMax",
+                获取值: () => MeGridMax.HasValue ? 格式化Vector3D(MeGridMax.Value) : "",
+                设置值: v => MeGridMax = 解析Vector3D(v),
+                描述: "网格最大边界点（相对于参考方块），用于网格识别",
+                空值时隐藏: true);
 
-            注册参数("最大外力干扰",
-                () => 最大外力干扰.ToString(),
-                v => { double val; if (double.TryParse(v, out val)) 最大外力干扰 = val; },
-                "允许参与制导量计算的最大外力干扰量(m/s^2)");
+            // 注册 MeGridMin 参数
+            注册参数("MeGridMin",
+                获取值: () => MeGridMin.HasValue ? 格式化Vector3D(MeGridMin.Value) : "",
+                设置值: v => MeGridMin = 解析Vector3D(v),
+                描述: "网格最小边界点（相对于参考方块）",
+                空值时隐藏: true);
+
+            // 性能统计参数
+            注册参数("性能统计重置间隔",
+                () => 性能统计重置间隔.ToString(),
+                v => { int val; if (int.TryParse(v, out val)) 性能统计重置间隔 = val; },
+                "性能统计重置间隔(帧数)");
+
+            // 飞控硬件参数
+            注册参数("推进器方向容差",
+                () => 推进器方向容差.ToString(),
+                v => { double val; if (double.TryParse(v, out val)) 推进器方向容差 = val; },
+                "推进器和陀螺仪的方向容差");
 
             注册参数("最长接近预测时间",
                 () => 最长接近预测时间.ToString(),
@@ -332,43 +427,10 @@ namespace IngameScript
                 v => { double val; if (double.TryParse(v, out val)) 补偿项失效距离 = val; },
                 "补偿项失效距离(米)");
 
-            // 引爆相关参数
-            注册参数("引爆距离阈值",
-                () => 引爆距离阈值.ToString(),
-                v => { double val; if (double.TryParse(v, out val)) 引爆距离阈值 = val; },
-                "接近引爆距离阈值(米)");
-
-            注册参数("碰炸解锁距离",
-                () => 碰炸解锁距离.ToString(),
-                v => { double val; if (double.TryParse(v, out val)) 碰炸解锁距离 = val; },
-                "碰炸解锁距离(米)");
-
-            注册参数("碰炸迟缓度",
-                () => 碰炸迟缓度.ToString(),
-                v => { double val; if (double.TryParse(v, out val)) 碰炸迟缓度 = val; },
-                "碰炸迟缓度");
-
-            注册参数("手动保险超控",
-                () => 手动保险超控.ToString(),
-                v => { bool val; if (bool.TryParse(v, out val)) 手动保险超控 = val; },
-                "手动保险超控");
-
-            // 热发射阶段相关参数
-            注册参数("热发射持续帧数",
-                () => 热发射持续帧数.ToString(),
-                v => { int val; if (int.TryParse(v, out val)) 热发射持续帧数 = val; },
-                "热发射阶段持续时间(帧数)");
-
-            注册参数("分离推进器名称",
-                () => 分离推进器名称,
-                v => 分离推进器名称 = v,
-                "分离推进器识别名称");
-
-            // 状态切换时间参数
-            注册参数("动力系统更新间隔",
-                () => 动力系统更新间隔.ToString(),
-                v => { int val; if (int.TryParse(v, out val)) 动力系统更新间隔 = val; },
-                "动力系统更新间隔(ticks)");
+            注册参数("最大速度限制",
+                () => 最大速度限制.ToString(),
+                v => { float val; if (float.TryParse(v, out val)) 最大速度限制 = val; },
+                "最大速度限制");
 
             注册参数("推进器重新分类间隔",
                 () => 推进器重新分类间隔.ToString(),
@@ -401,86 +463,21 @@ namespace IngameScript
                 v => 内环参数 = 解析PID参数(v),
                 "内环PID参数(P,I,D)");
 
+            注册参数("启用外力干扰",
+                () => 启用外力干扰.ToString(),
+                v => { bool val; if (bool.TryParse(v, out val)) 启用外力干扰 = val; },
+                "是否启用外力干扰计算");
+
+            注册参数("最大外力干扰",
+                () => 最大外力干扰.ToString(),
+                v => { double val; if (double.TryParse(v, out val)) 最大外力干扰 = val; },
+                "允许参与制导量计算的最大外力干扰量(m/s^2)");
+
             // 目标跟踪器参数
             注册参数("目标历史最大长度",
                 () => 目标历史最大长度.ToString(),
                 v => { int val; if (int.TryParse(v, out val)) 目标历史最大长度 = val; },
                 "目标历史记录最大长度");
-
-            // AI参数
-            注册参数("最大速度限制",
-                () => 最大速度限制.ToString(),
-                v => { float val; if (float.TryParse(v, out val)) 最大速度限制 = val; },
-                "最大速度限制");
-
-            注册参数("战斗块更新间隔正常",
-                () => 战斗块更新间隔_搜索.ToString(),
-                v => { int val; if (int.TryParse(v, out val)) 战斗块更新间隔_搜索 = val; },
-                "战斗块更新目标间隔(搜索模式)");
-
-            注册参数("战斗块更新间隔跟踪",
-                () => 战斗块更新间隔_专注.ToString(),
-                v => { int val; if (int.TryParse(v, out val)) 战斗块更新间隔_专注 = val; },
-                "战斗块更新目标间隔(专注模式)");
-
-            注册参数("战斗块攻击模式",
-                () => 战斗块攻击模式.ToString(),
-                v => { int val; if (int.TryParse(v, out val)) 战斗块攻击模式 = val; },
-                "战斗块攻击模式");
-
-            注册参数("目标优先级",
-                () => 格式化目标优先级(目标优先级),
-                v => 目标优先级 = 解析目标优先级(v, 目标优先级),
-                "战斗块目标优先级(Closest,Largest,Smallest)");
-
-            // 飞控硬件参数
-            注册参数("推进器方向容差",
-                () => 推进器方向容差.ToString(),
-                v => { double val; if (double.TryParse(v, out val)) 推进器方向容差 = val; },
-                "推进器和陀螺仪的方向容差");
-
-            注册参数("常驻滚转转速",
-                () => 常驻滚转转速.ToString(),
-                v => { double val; if (double.TryParse(v, out val)) 常驻滚转转速 = val; },
-                "常驻滚转转速(弧度/秒)");
-
-            // 性能统计参数
-            注册参数("性能统计重置间隔",
-                () => 性能统计重置间隔.ToString(),
-                v => { int val; if (int.TryParse(v, out val)) 性能统计重置间隔 = val; },
-                "性能统计重置间隔(帧数)");
-
-            // 组名配置
-            注册参数("组名前缀",
-                () => 组名前缀,
-                v => 组名前缀 = v,
-                "导弹方块组名前缀");
-
-            注册参数("代理控制器前缀",
-                () => 代理控制器前缀,
-                v => 代理控制器前缀 = v,
-                "代理控制器前缀");
-                
-            // 注册 MeGridMax 参数
-            注册参数("MeGridMax",
-                获取值: () => MeGridMax.HasValue ? 格式化Vector3D(MeGridMax.Value) : "",
-                设置值: v => MeGridMax = 解析Vector3D(v),
-                描述: "网格最大边界点（相对于参考方块）",
-                空值时隐藏: true);
-
-            // 注册 MeGridMin 参数
-            注册参数("MeGridMin",
-                获取值: () => MeGridMin.HasValue ? 格式化Vector3D(MeGridMin.Value) : "",
-                设置值: v => MeGridMin = 解析Vector3D(v),
-                描述: "网格最小边界点（相对于参考方块）",
-                空值时隐藏: true);
-
-            // 注册 ExcludeTags 参数
-            注册参数("ExcludeTags",
-                获取值: () => ExcludeTags ?? "",
-                设置值: v => ExcludeTags = 解析字符串(v),
-                描述: "排除标签（列表），包含这些标签的方块将被排除在识别外",
-                空值时隐藏: true);
         }
 
         #endregion

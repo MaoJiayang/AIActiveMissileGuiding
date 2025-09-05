@@ -581,7 +581,7 @@ namespace IngameScript
                 if (更新计数器 % 参数们.动力系统更新间隔 == 0)
                 {
                     // 使用预测位置进行制导
-                    long 预测时间毫秒 = (long)Math.Round((更新计数器 - 上次目标更新时间) * 参数们.时间常数 * 1000);
+                    long 预测时间毫秒 = (long)Math.Round((更新计数器 - 上次目标更新时间) * 参数们.时间常数 * 1000) + 16;
                     SimpleTargetInfo 预测目标 = 目标跟踪器.PredictFutureTargetInfo(预测时间毫秒);
                     导弹状态信息.制导命令 = 比例导航制导(控制器, 预测目标);
                     导弹状态信息.上次预测目标位置 = 预测目标.Position;
@@ -845,7 +845,7 @@ namespace IngameScript
         {
             if (方块组 == null)
             {
-                初始化消息.AppendLine($"未找到组名为{参数们.组名前缀}的方块组。");
+                初始化消息.AppendLine($"网格识别失败:{方块组.遍历状态}");
                 return false;
             }
 

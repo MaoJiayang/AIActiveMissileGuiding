@@ -277,6 +277,7 @@ namespace IngameScript
                 else if (argument.ToLower() == "save")
                 {
                     方块组.重新框定();
+                    已经初始化 = false;
                     return;
                 }
             }

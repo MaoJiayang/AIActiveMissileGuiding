@@ -249,10 +249,15 @@ namespace IngameScript
         #region 组名配置
 
         /// <summary>
-        /// 导弹方块组名前缀
+        /// 控制器前缀
         /// </summary>
         public string 代理控制器前缀 { get; set; } = "代理";
 
+        /// <summary>
+        /// 同类识别前缀
+        /// </summary>
+        public string 同类识别前缀 { get; set; } = "#导弹飞控#";
+        
         #endregion
 
         #region 委托注册系统
@@ -270,6 +275,11 @@ namespace IngameScript
         {
             参数注册表 = new Dictionary<string, 参数描述符>();
             // 命名配置
+            注册参数("同类识别前缀",
+                () => 同类识别前缀,
+                v => 同类识别前缀 = v,
+                "同类识别前缀，用于识别同类导弹");
+
             注册参数("代理控制器前缀",
                 () => 代理控制器前缀,
                 v => 代理控制器前缀 = v,

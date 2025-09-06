@@ -654,6 +654,9 @@ namespace IngameScript
                         }
                         // 备注：如果在更新间隔之间旋转了超过2π，会导致估算角速度不准确（极端情况）
                     }
+                    // 为me添加同类识别前缀
+                    if (!Me.CustomName.StartsWith(参数们.同类识别前缀))
+                        Me.CustomName = $"{参数们.同类识别前缀}{Me.CustomName}";
                     return false;
 
                 case 6: // Stage 3: 获取推进器
@@ -1447,7 +1450,8 @@ namespace IngameScript
                 }
                 导弹状态信息.等待二阶段引爆 = false;
                 导弹状态信息.当前状态 = 导弹状态机.待机状态;
-                已经初始化 = 初始化硬件();
+                已经初始化 = false;
+                方块组.重置();
                 // 引爆完成，保持当前状态（导弹应该已经销毁）
             }
         }

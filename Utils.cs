@@ -511,13 +511,18 @@ namespace IngameScript
         /// </summary>
         /// <param name="时间差毫秒">弥补横向加速度所需时间 - 最接近时间（毫秒）</param>
         /// <param name="参考时间毫秒">半衰减时间，当时间差等于此值时系数为0.5</param>
+        /// <param name="温度参数">控制sigmoid陡峭度，值越小越陡峭，值越大越平缓</param>
         /// <returns>接近加速度调整系数，范围[0,1]</returns>
-        public static double 计算时间差调整系数SIGMOD(long 时间差毫秒, double 参考时间毫秒 = 0.0)
+        public static double 计算时间差调整系数SIGMOD(long 时间差毫秒, double 参考时间毫秒 = 0.0, double 温度参数 = 500.0)
         {
             // 使用sigmoid函数实现平滑过渡
             // 当时间差 < 0（时间充足）时，系数接近1
             // 当时间差 > 0（时间不足）时，系数接近0
-            double x = -(double)时间差毫秒 / 参考时间毫秒;
+            // 温度参数控制过渡的陡峭程度
+            // 限制时间差绝对值在10000以内
+
+            时间差毫秒 = Math.Max(Math.Min(时间差毫秒, 10000), -10000);
+            double x = -(double)(时间差毫秒 - 参考时间毫秒) / 温度参数;
             return 1.0 / (1.0 + Math.Exp(-x));
         }
     }

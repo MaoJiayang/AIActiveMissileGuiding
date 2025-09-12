@@ -1114,11 +1114,13 @@ namespace IngameScript
 
             // 外部预计算：用于补偿外源扰动
             Vector3D 运动学加速度 = 控制器.GetAcceleration();
+            double 接近加速度减损系数 = MathHelper.计算时间差调整系数SIGMOD(弥补命中时间差);
             // Vector3D 本地重力 = 控制器.GetNaturalGravity();
 
             // 用于输出：最终推进器输出方向（迭代中的最大加速度方向）
             Vector3D 最终最大过载向量 = Vector3D.Zero;
             Vector3D 最终加速度指令 = Vector3D.Zero;
+            Vector3D 比例导航加速度方向 = 比例导航加速度.Normalized();
             Vector3D 当前Cmd方向 = Vector3D.Normalize(比例导航加速度 + 参数们.最小接近加速度 * 视线单位向量);
 
             var 轴向最大推力 = 推进器系统.轴向最大推力;
@@ -1135,27 +1137,23 @@ namespace IngameScript
                 
                 // Step2: 判断是否足以提供ProNav指令
                 double ProNav模长 = 比例导航加速度.Length();
-                Vector3D 接近加速度 = Vector3D.Zero;
-
+                double 接近加速度大小 = 0;
                 if (世界最大加速度模长 <= ProNav模长)
                 {
                     // 提供不了，直接使用最小接近加速度
-                    接近加速度 = 参数们.最小接近加速度 * 视线单位向量;
+                    接近加速度大小 = 参数们.最小接近加速度;
                 }
                 else
                 {
                     // 使用直角三角形原则分配
                     double 剩余加速度平方 = 世界最大加速度模长 * 世界最大加速度模长 - ProNav模长 * ProNav模长;
-                    double 接近加速度大小 = Math.Sqrt(剩余加速度平方);
-                    // ===== 添加时间差调整 =====
-                    double 时间差调整系数 = MathHelper.计算时间差调整系数SIGMOD(弥补命中时间差, 参数们.最长接近预测时间 / 2);
-                    接近加速度大小 *= 时间差调整系数;
-                    // =======================
+                    接近加速度大小 = Math.Sqrt(剩余加速度平方);
                     接近加速度大小 = Math.Max(接近加速度大小, 参数们.最小接近加速度);
-                    接近加速度 = 接近加速度大小 * 视线单位向量;
                 }
-
-                Vector3D 当前Cmd = 比例导航加速度 + 接近加速度;
+                double 接近加速度减损 = 接近加速度大小 - 接近加速度大小 * 接近加速度减损系数;
+                Vector3D 接近加速度 = Math.Max(接近加速度大小 - 接近加速度减损, 参数们.最小接近加速度) * 视线单位向量;
+                Vector3D 当前Cmd = (比例导航加速度 + 接近加速度减损 * 比例导航加速度方向) + 接近加速度;
+                //Vector3D 当前Cmd = 比例导航加速度 + 接近加速度;
                 Vector3D 新方向 = Vector3D.Normalize(当前Cmd);
                 if ((新方向 - 当前Cmd方向).LengthSquared() < 参数们.最小向量长度)
                 {

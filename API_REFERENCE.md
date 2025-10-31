@@ -186,40 +186,35 @@ public static SimpleTargetInfo FromDetectedInfo(MyDetectedEntityInfo info)
 #### 方法 (Methods)
 
 ```csharp
-public TargetTracker(参数管理器 参数管理器, IMyProgrammableBlock Me)
+public TargetTracker()
+public TargetTracker(int maxHistory)
 ```
 **描述：** 构造函数。  
 **参数：**
-- `参数管理器` - 参数管理器实例
-- `Me` - 编程块引用
+- `maxHistory` - (可选) 目标历史记录最大长度，默认30
 
 ```csharp
-public void UpdateTarget(SimpleTargetInfo newTarget)
+public void UpdateTarget(SimpleTargetInfo newTarget, bool hasVelocityAvailable = false)
+public void UpdateTarget(MyDetectedEntityInfo target, bool hasVelocityAvailable = false)
+public void UpdateTarget(Vector3D position, Vector3D velocity, long timeStamp, bool hasVelocityAvailable = false)
+public void UpdateTarget(Vector3D position, long timeStamp, bool hasVelocityAvailable = false)
 ```
-**描述：** 更新目标信息。  
+**描述：** 更新目标信息（多个重载版本）。  
 **参数：**
-- `newTarget` - 新的目标信息
+- `newTarget` / `target` - 目标信息
+- `position` - 目标位置
+- `velocity` - 目标速度（可选）
+- `timeStamp` - 时间戳 (ms)
+- `hasVelocityAvailable` - 是否有可用的速度信息
 
 ```csharp
-public Vector3D PredictTargetPosition(Vector3D missilePos, Vector3D missileVel, long currentTime)
+public SimpleTargetInfo PredictFutureTargetInfo(long futureTimeMs, bool hasVelocityAvailable = false)
 ```
-**描述：** 预测目标未来位置。  
+**描述：** 预测目标未来信息。  
 **参数：**
-- `missilePos` - 导弹当前位置
-- `missileVel` - 导弹当前速度
-- `currentTime` - 当前时间戳 (ms)  
-**返回：** 预测的目标位置
-
-```csharp
-public double CalculateClosingVelocity(Vector3D missilePos, Vector3D missileVel, Vector3D targetPos, Vector3D targetVel)
-```
-**描述：** 计算接近速度。  
-**参数：**
-- `missilePos` - 导弹位置
-- `missileVel` - 导弹速度
-- `targetPos` - 目标位置
-- `targetVel` - 目标速度  
-**返回：** 接近速度 (m/s)，正值表示接近
+- `futureTimeMs` - 预测的未来时间 (ms)
+- `hasVelocityAvailable` - 是否有可用的速度信息  
+**返回：** 预测的目标信息（包含位置、速度、加速度）
 
 ```csharp
 public CircularMotionParams DetectCircularMotion()
@@ -513,8 +508,8 @@ public void Clear()
 // 创建参数管理器
 参数管理器 参数们 = new 参数管理器();
 
-// 创建目标跟踪器
-TargetTracker 跟踪器 = new TargetTracker(参数们, Me);
+// 创建目标跟踪器（使用默认历史长度30）
+TargetTracker 跟踪器 = new TargetTracker();
 
 // 创建推进系统
 推进系统 推进器 = new 推进系统(参数们, Me);
@@ -529,18 +524,17 @@ TargetTracker 跟踪器 = new TargetTracker(参数们, Me);
 
 ```csharp
 // 更新目标信息
-SimpleTargetInfo 目标 = SimpleTargetInfo.FromDetectedInfo(战斗块.GetTargetInfo());
-跟踪器.UpdateTarget(目标);
+Vector3D 目标位置 = 战斗块.GetTargetPosition();
+跟踪器.UpdateTarget(目标位置, Vector3D.Zero, 当前时间戳);
 
-// 预测目标位置
-Vector3D 预测位置 = 跟踪器.PredictTargetPosition(
-    导弹位置, 导弹速度, 当前时间戳);
+// 预测目标未来位置（预测100ms后）
+SimpleTargetInfo 预测目标 = 跟踪器.PredictFutureTargetInfo(100);
+Vector3D 预测位置 = 预测目标.Position;
 
 // 计算制导命令
 Vector3D 视线向量 = 预测位置 - 导弹位置;
-double 接近速度 = 跟踪器.CalculateClosingVelocity(
-    导弹位置, 导弹速度, 预测位置, 目标速度);
-Vector3D 制导命令 = 计算比例导航(视线向量, 接近速度);
+// 使用比例导航制导计算加速度命令
+Vector3D 制导命令 = 比例导航制导(控制器, 预测目标);
 
 // 应用控制
 陀螺仪.瞄准(制导命令, 当前时间戳);

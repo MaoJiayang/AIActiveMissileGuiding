@@ -97,8 +97,8 @@ public class 导弹状态量
 
 **1. 线性运动模型 (Linear Motion Model)**
 ```
-位置预测: P(t) = P₀ + V₀*t + 0.5*a*t²
-速度预测: V(t) = V₀ + a*t
+位置预测: P(t) = P₀ + V₀*t + 0.5*a₀*t²
+速度预测: V(t) = V₀ + a₀*t
 ```
 
 **2. 圆周运动模型 (Circular Motion Model)**

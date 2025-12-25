@@ -183,6 +183,95 @@ namespace IngameScript
             // Echo($"[推进器] 动力学加速度夹角 {Vector3D.Angle(导弹状态信息.导弹世界力学加速度,控制器.GetAcceleration()):n2}");
 
         }
+
+        /// <summary>
+        /// 简化推进器控制 - 开关逻辑（纯方向制导专用）
+        /// 主推进器全开，侧向推进器根据期望方向决定开关
+        /// </summary>
+        /// <param name="期望方向">期望飞行方向（单位向量，世界坐标系）</param>
+        /// <param name="控制器">控制器接口</param>
+        public void 控制推进器_开关模式(Vector3D 期望方向, IMyControllerCompat 控制器)
+        {
+            内部时钟++;
+            if (内部时钟 % 参数们.动力系统更新间隔 != 0)
+                return;
+
+            // 仅在第一次调用或推进器列表发生变化时进行分类
+            if (!推进器已分类 || 内部时钟 % 参数们.推进器重新分类间隔 == 0)
+            {
+                分类推进器(控制器);
+                推进器已分类 = true;
+            }
+
+            // 将期望方向转换为飞船本地坐标系
+            Vector3D 期望方向本地 = Vector3D.TransformNormal(期望方向, MatrixD.Transpose(控制器.WorldMatrix));
+            期望方向本地 = Vector3D.Normalize(期望方向本地);
+
+            // 1. 主推进器（Z轴前向，即ZN组 - 推力向前）：全开
+            控制轴向推进器_开关("ZN", true);
+            // 后向推进器关闭（不能同时开启对向推进器）
+            控制轴向推进器_开关("ZP", false);
+
+            // 2. 侧向推进器：根据期望方向在该轴的分量决定开关
+            // X轴控制
+            if (期望方向本地.X > 0.1) // 期望向右
+            {
+                控制轴向推进器_开关("XP", true);  // 开启向右推力
+                控制轴向推进器_开关("XN", false); // 关闭向左推力
+            }
+            else if (期望方向本地.X < -0.1) // 期望向左
+            {
+                控制轴向推进器_开关("XN", true);  // 开启向左推力
+                控制轴向推进器_开关("XP", false); // 关闭向右推力
+            }
+            else // X方向无明显需求，关闭X轴推进器
+            {
+                控制轴向推进器_开关("XP", false);
+                控制轴向推进器_开关("XN", false);
+            }
+
+            // Y轴控制
+            if (期望方向本地.Y > 0.1) // 期望向上
+            {
+                控制轴向推进器_开关("YP", true);  // 开启向上推力
+                控制轴向推进器_开关("YN", false); // 关闭向下推力
+            }
+            else if (期望方向本地.Y < -0.1) // 期望向下
+            {
+                控制轴向推进器_开关("YN", true);  // 开启向下推力
+                控制轴向推进器_开关("YP", false); // 关闭向上推力
+            }
+            else // Y方向无明显需求，关闭Y轴推进器
+            {
+                控制轴向推进器_开关("YP", false);
+                控制轴向推进器_开关("YN", false);
+            }
+        }
+
+        /// <summary>
+        /// 控制指定轴向的推进器组开关
+        /// </summary>
+        /// <param name="轴向组名">推进器组名（XP/XN/YP/YN/ZP/ZN）</param>
+        /// <param name="开启">是否开启</param>
+        private void 控制轴向推进器_开关(string 轴向组名, bool 开启)
+        {
+            List<IMyThrust> 推进器组;
+            if (!推进器推力方向组.TryGetValue(轴向组名, out 推进器组))
+                return;
+
+            foreach (var 推进器 in 推进器组)
+            {
+                if (开启)
+                {
+                    推进器.Enabled = true;
+                    推进器.ThrustOverride = 推进器.MaxThrust; // 全力推进
+                }
+                else
+                {
+                    推进器.ThrustOverride = 0f; // 关闭推力
+                }
+            }
+        }
         #endregion
 
         #region 硬件驱动

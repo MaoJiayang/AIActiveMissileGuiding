@@ -12,17 +12,12 @@ namespace IngameScript
     /// </summary>
     public class 参数管理器
     {
-        public string 版本号 { get; } = "1.2.2-守株待兔";
+        public string 版本号 { get; } = "2.0.0-猪突猛进";
         #region 制导相关参数
         /// <summary>
         /// 向量最小有效长度
         /// </summary>
         public double 最小向量长度 { get; set; } = 1e-6;
-
-        /// <summary>
-        /// 最小接近加速度(m/s)
-        /// </summary>
-        public double 最小接近加速度 { get; set; } = 9.8;
 
         /// <summary>
         /// 时间常数(秒)
@@ -35,46 +30,42 @@ namespace IngameScript
         public double 角度误差最小值 { get; set; } = Math.PI / 180.0 * 0.2;
 
         /// <summary>
-        /// 导航常数初始值
-        /// </summary>
-        public double 导航常数初始值 { get; set; } = 3;
-
-        /// <summary>
-        /// 导航常数最小值
-        /// </summary>
-        public double 导航常数最小值 { get; set; } = 3;
-
-        /// <summary>
-        /// 导航常数最大值
-        /// </summary>
-        public double 导航常数最大值 { get; set; } = 5;
-
-        /// <summary>
         /// 是否启用攻击角度约束
         /// </summary>
         public bool 启用攻击角度约束 { get; set; } = true;
 
-        /// <summary>
-        /// 是否启用外力干扰计算
-        /// </summary>
-        public bool 启用外力干扰 { get; set; } = true;
         /// <summary>
         /// 允许参与制导量计算的最大外力干扰量(m/s^2)
         /// 11.8约等于1.2g
         /// </summary>
         public double 最大外力干扰 { get; set; } = 11.8;
 
-        /// <summary>
-        /// 导弹将会向着预测时间后的目标位置接近，取决于预估最近时间
-        /// 该参数决定最长的预测时间
-        /// </summary>
-        public long 最长接近预测时间 { get; set; } = 2000; // 最长预测时间(毫秒)
+        #endregion
+
+        #region 纯方向制导参数
 
         /// <summary>
-        ///  补偿项失效距离(米)
-        /// 当目标距离小于此值时，补偿项将不再生效
+        /// 视线角速度PID - P系数
+        /// 2D原型验证值：10.0
         /// </summary>
-        public double 补偿项失效距离 { get; set; } = 200.0;
+        public double 方向制导_Kp { get; set; } = 12.0;
+
+        /// <summary>
+        /// 视线角速度PID - I系数
+        /// 2D原型验证值：0.1
+        /// </summary>
+        public double 方向制导_Ki { get; set; } = 0.05;
+
+        /// <summary>
+        /// 视线角速度PID - D系数
+        /// 2D原型验证值：12.5
+        /// </summary>
+        public double 方向制导_Kd { get; set; } = 3;
+
+        /// <summary>
+        /// 积分限幅（防止积分饱和）
+        /// </summary>
+        public double 方向制导_积分限幅 { get; set; } = 90.0;
 
         #endregion
 
@@ -366,11 +357,6 @@ namespace IngameScript
                 v => { double val; if (double.TryParse(v, out val)) 最小向量长度 = val; },
                 "向量最小有效长度");
 
-            注册参数("最小接近加速度",
-                () => 最小接近加速度.ToString(),
-                v => { double val; if (double.TryParse(v, out val)) 最小接近加速度 = val; },
-                "最小接近加速度(m/s)");
-
             注册参数("时间常数",
                 () => 时间常数.ToString(),
                 v => { double val; if (double.TryParse(v, out val)) 时间常数 = val; },
@@ -380,21 +366,6 @@ namespace IngameScript
                 () => 格式化角度(角度误差最小值),
                 v => 角度误差最小值 = 解析角度(v),
                 "角度误差下限，小于此值视为对准(度)");
-
-            注册参数("导航常数初始值",
-                () => 导航常数初始值.ToString(),
-                v => { double val; if (double.TryParse(v, out val)) 导航常数初始值 = val; },
-                "导航常数初始值");
-
-            注册参数("导航常数最小值",
-                () => 导航常数最小值.ToString(),
-                v => { double val; if (double.TryParse(v, out val)) 导航常数最小值 = val; },
-                "导航常数最小值");
-
-            注册参数("导航常数最大值",
-                () => 导航常数最大值.ToString(),
-                v => { double val; if (double.TryParse(v, out val)) 导航常数最大值 = val; },
-                "导航常数最大值");
 
             注册参数("启用攻击角度约束",
                 () => 启用攻击角度约束.ToString(),
@@ -426,16 +397,6 @@ namespace IngameScript
                 () => 推进器方向容差.ToString(),
                 v => { double val; if (double.TryParse(v, out val)) 推进器方向容差 = val; },
                 "推进器和陀螺仪的方向容差");
-
-            注册参数("最长接近预测时间",
-                () => 最长接近预测时间.ToString(),
-                v => { long val; if (long.TryParse(v, out val)) 最长接近预测时间 = val; },
-                "导弹预测目标位置的最长时间(毫秒)");
-
-            注册参数("补偿项失效距离",
-                () => 补偿项失效距离.ToString(),
-                v => { double val; if (double.TryParse(v, out val)) 补偿项失效距离 = val; },
-                "补偿项失效距离(米)");
 
             注册参数("最大速度限制",
                 () => 最大速度限制.ToString(),
@@ -473,11 +434,6 @@ namespace IngameScript
                 v => 内环参数 = 解析PID参数(v),
                 "内环PID参数(P,I,D)");
 
-            注册参数("启用外力干扰",
-                () => 启用外力干扰.ToString(),
-                v => { bool val; if (bool.TryParse(v, out val)) 启用外力干扰 = val; },
-                "是否启用外力干扰计算");
-
             注册参数("最大外力干扰",
                 () => 最大外力干扰.ToString(),
                 v => { double val; if (double.TryParse(v, out val)) 最大外力干扰 = val; },
@@ -488,6 +444,27 @@ namespace IngameScript
                 () => 目标历史最大长度.ToString(),
                 v => { int val; if (int.TryParse(v, out val)) 目标历史最大长度 = val; },
                 "目标历史记录最大长度");
+
+            // 纯方向制导参数
+            注册参数("方向制导_Kp",
+                () => 方向制导_Kp.ToString(),
+                v => { double val; if (double.TryParse(v, out val)) 方向制导_Kp = val; },
+                "视线角速度PID P系数");
+
+            注册参数("方向制导_Ki",
+                () => 方向制导_Ki.ToString(),
+                v => { double val; if (double.TryParse(v, out val)) 方向制导_Ki = val; },
+                "视线角速度PID I系数");
+
+            注册参数("方向制导_Kd",
+                () => 方向制导_Kd.ToString(),
+                v => { double val; if (double.TryParse(v, out val)) 方向制导_Kd = val; },
+                "视线角速度PID D系数");
+
+            注册参数("方向制导_积分限幅",
+                () => 方向制导_积分限幅.ToString(),
+                v => { double val; if (double.TryParse(v, out val)) 方向制导_积分限幅 = val; },
+                "积分限幅");
         }
 
         #endregion
@@ -500,18 +477,6 @@ namespace IngameScript
         public double 获取PID时间常数()
         {
             return 时间常数 * 动力系统更新间隔;
-        }
-
-        /// <summary>
-        /// 根据当前推进器能力动态计算导航常数
-        /// </summary>
-        /// <param name="最大加速度">导弹最大加速度</param>
-        /// <returns>计算后的导航常数</returns>
-        public double 计算导航常数(double 最大加速度, double 目标距离)
-        {
-            double 计算值 = 最大加速度 / 10.0;
-            计算值 *= Math.Max(目标距离 / 1500, 0.1); // 距离越远，导航常数越大
-            return Math.Min(Math.Max(计算值, 导航常数最小值), 导航常数最大值);
         }
 
         /// <summary>

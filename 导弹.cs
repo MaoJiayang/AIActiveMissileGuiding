@@ -75,10 +75,10 @@ namespace IngameScript
             上次状态 = 导弹状态机.待机状态;
             上次真实目标位置 = Vector3D.Zero;
             制导命令 = Vector3D.Zero;
-            导弹最大过载 = 0;
+            导弹最大过载 = 114514;
             // 导弹世界力学加速度 = Vector3D.Zero;
             角度误差在容忍范围内 = false;
-            导航常数 = 3.0; // 默认值，会在初始化时设置
+            导航常数 = 114514.0; // 默认值，会在初始化时设置
             等待二阶段引爆 = false;
             导弹状态信息 = new StringBuilder();
             上次预测目标位置 = Vector3D.Zero;

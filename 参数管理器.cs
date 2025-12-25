@@ -60,7 +60,7 @@ namespace IngameScript
         /// 视线角速度PID - D系数
         /// 2D原型验证值：12.5
         /// </summary>
-        public double 方向制导_Kd { get; set; } = 3;
+        public double 方向制导_Kd { get; set; } = 9;
 
         /// <summary>
         /// 积分限幅（防止积分饱和）

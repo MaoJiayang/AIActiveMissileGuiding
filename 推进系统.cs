@@ -68,6 +68,16 @@ namespace IngameScript
             初始化分离推进器();
             分类推进器(控制器);
         }
+        public void 初始化(导弹识别器 方块组, IMyControllerCompat 控制器)
+        {
+            // 获取参考驾驶舱
+            参考驾驶舱 = 控制器;
+            // 获取推进器列表
+            方块组.GetBlocksOfType<IMyThrust>(推进器列表);
+            // 可选：获取分离推进器
+            初始化分离推进器();
+            分类推进器(控制器);
+        }
         public void 初始化(List<IMyThrust> 推进器列表, IMyControllerCompat 控制器)
         {
             // 获取参考驾驶舱

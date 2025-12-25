@@ -89,9 +89,9 @@ namespace IngameScript
             导弹状态信息.Clear();
             // 导弹状态信息.AppendLine($"[导弹状态] 当前状态: {当前状态转文字()}");
             // 导弹状态信息.AppendLine($"[导弹状态] 力学加速度: {导弹世界力学加速度.Length():F2}");
-            导弹状态信息.AppendLine($"[导弹状态] 导航常数: {导航常数:F2}");
-            导弹状态信息.AppendLine($"[导弹状态] 可用过载: {导弹最大过载:F2}");
-            导弹状态信息.AppendLine($"[导弹状态] 需用过载: {制导命令.Length():F2}");
+            导弹状态信息.AppendLine($"导航常数: {导航常数:F2}");
+            导弹状态信息.AppendLine($"可用过载: {导弹最大过载:F2}");
+            导弹状态信息.AppendLine($"需用过载: {制导命令.Length():F2}");
             return 导弹状态信息;
         }
         private string 当前状态转文字()

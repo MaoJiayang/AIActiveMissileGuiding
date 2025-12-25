@@ -434,4 +434,96 @@ namespace IngameScript
         /// <summary> 当前窗口移动平均值 = sum / Count </summary>
         public T Average => Count > 0 ? _divide(_sum, Count) : default(T);
     }
+    public class MathHelper
+    {
+        /// <summary>
+        /// Softmax
+        /// </summary>
+        /// <param name="errors">数组</param>
+        /// <param name="temperature">温度参数，默认为1.0</param>
+        /// <returns>Softmax 归一化后的权重数组</returns>
+        public static double[] Softmax(double[] errors, double temperature = 0.2)
+        {
+            if (errors == null || errors.Length == 0)
+                throw new ArgumentException("Errors array cannot be null or empty.");
+
+            // Step 1: 找到最大值用于数值稳定
+            double maxError = double.MinValue;
+            foreach (var e in errors)
+            {
+                if (e > maxError) maxError = e;
+            }
+
+            // Step 2: 计算指数部分
+            double[] expValues = new double[errors.Length];
+            for (int i = 0; i < errors.Length; i++)
+            {
+                expValues[i] = Math.Exp(-(errors[i] - maxError) / temperature);
+            }
+
+            // Step 3: 计算总和
+            double sumExp = 0;
+            for (int i = 0; i < expValues.Length; i++)
+            {
+                sumExp += expValues[i];
+            }
+
+            // Step 4: 归一化
+            double[] weights = new double[errors.Length];
+            for (int i = 0; i < weights.Length; i++)
+            {
+                weights[i] = expValues[i] / sumExp;
+            }
+
+            return weights;
+        }
+
+        /// <summary>
+        /// 基于时间差计算接近加速度调整系数
+        /// 使用Softmax来平滑地在"接近优先"和"横向修正优先"之间切换
+        /// </summary>
+        /// <param name="时间差毫秒">弥补横向加速度所需时间 - 最接近时间（毫秒）</param>
+        /// <param name="参考时间毫秒">参考时间尺度，默认1000ms</param>
+        /// <param name="温度">控制切换的平滑度，越小切换越陡峭</param>
+        /// <returns>接近加速度调整系数，范围[0,1]</returns>
+        public static double 计算时间差调整系数(long 时间差毫秒, double 参考时间毫秒 = 1000.0, double 温度 = 0.3)
+        {
+            // 将时间差归一化到参考时间尺度
+            double 归一化时间差 = 时间差毫秒 / 参考时间毫秒;
+            
+            // 构造两个"策略"的错误值：
+            // 策略1：接近优先 - 当时间差为负（时间充足）时错误小
+            // 策略2：横向修正优先 - 当时间差为正（时间不足）时错误小
+            double[] 策略错误 = new double[2];
+            策略错误[0] = Math.Abs(Math.Min(归一化时间差, 0)); // 接近优先策略的"错误"
+            策略错误[1] = Math.Max(归一化时间差, 0);        // 横向修正优先策略的"错误"
+            
+            // 使用Softmax计算权重
+            double[] 权重 = Softmax(策略错误, 温度);
+            
+            // 返回接近优先策略的权重作为调整系数
+            // 权重[0] = 1 表示全力接近，权重[0] = 0 表示减少接近加速度
+            return 权重[0];
+        }
+
+        /// <summary>
+        /// 更直观的时间差调整系数计算（sigmoid函数版本）
+        /// </summary>
+        /// <param name="时间差毫秒">弥补横向加速度所需时间 - 最接近时间（毫秒）</param>
+        /// <param name="参考时间毫秒">半衰减时间，当时间差等于此值时系数为0.5</param>
+        /// <param name="温度参数">控制sigmoid陡峭度，值越小越陡峭，值越大越平缓</param>
+        /// <returns>接近加速度调整系数，范围[0,1]</returns>
+        public static double 计算时间差调整系数SIGMOD(long 时间差毫秒, double 参考时间毫秒 = 0.0, double 温度参数 = 500.0)
+        {
+            // 使用sigmoid函数实现平滑过渡
+            // 当时间差 < 0（时间充足）时，系数接近1
+            // 当时间差 > 0（时间不足）时，系数接近0
+            // 温度参数控制过渡的陡峭程度
+            // 限制时间差绝对值在10000以内
+
+            时间差毫秒 = Math.Max(Math.Min(时间差毫秒, 10000), -10000);
+            double x = -(double)(时间差毫秒 - 参考时间毫秒) / 温度参数;
+            return 1.0 / (1.0 + Math.Exp(-x));
+        }
+    }
 }

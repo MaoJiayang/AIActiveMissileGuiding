@@ -512,7 +512,7 @@ namespace IngameScript
             double learningRate = 0.1;   // 控制每次更新的影响强度
             // 对误差进行Softmax得到目标权重
             double[] LC = { linearError, circularError };
-            double[] targetWeightsLC = Softmax(LC);
+            double[] targetWeightsLC = MathHelper.Softmax(LC);
             double targetLinearWeight = targetWeightsLC[0];
             double targetCircularWeight = targetWeightsLC[1];
             // // 基于误差比例计算目标权重
@@ -561,49 +561,6 @@ namespace IngameScript
         {
             return Math.Abs(dt) < TimeEpsilon ? TimeEpsilon : dt;
         }
-
-        /// <summary>
-        /// Softmax
-        /// </summary>
-        /// <param name="errors">数组</param>
-        /// <param name="temperature">温度参数，默认为1.0</param>
-        /// <returns>Softmax 归一化后的权重数组</returns>
-        private double[] Softmax(double[] errors, double temperature = 0.2)
-        {
-            if (errors == null || errors.Length == 0)
-                throw new ArgumentException("Errors array cannot be null or empty.");
-
-            // Step 1: 找到最大值用于数值稳定
-            double maxError = double.MinValue;
-            foreach (var e in errors)
-            {
-                if (e > maxError) maxError = e;
-            }
-
-            // Step 2: 计算指数部分
-            double[] expValues = new double[errors.Length];
-            for (int i = 0; i < errors.Length; i++)
-            {
-                expValues[i] = Math.Exp(-(errors[i] - maxError) / temperature);
-            }
-
-            // Step 3: 计算总和
-            double sumExp = 0;
-            for (int i = 0; i < expValues.Length; i++)
-            {
-                sumExp += expValues[i];
-            }
-
-            // Step 4: 归一化
-            double[] weights = new double[errors.Length];
-            for (int i = 0; i < weights.Length; i++)
-            {
-                weights[i] = expValues[i] / sumExp;
-            }
-
-            return weights;
-        }
-
 
         /// <summary>
         /// 获取当前速度

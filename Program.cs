@@ -1035,9 +1035,12 @@ namespace IngameScript
             // 预测未来位置
             long 最接近时间 = 计算碰撞时间(目标信息);
 
-            // long 最接近时间_裁剪 = Math.Min(最接近时间, 参数们.最长接近预测时间);
-            // SimpleTargetInfo 最接近位置 = 目标跟踪器.PredictFutureTargetInfo(最接近时间_裁剪);
-            // 视线 = 最接近位置.Position - 控制器.GetPosition();
+            long 最接近时间_裁剪 = Math.Min(最接近时间, 参数们.最长接近预测时间);
+            if (参数们.最长接近预测时间 > 参数们.最小向量长度)
+            {
+                SimpleTargetInfo 最接近位置 = 目标跟踪器.PredictFutureTargetInfo(最接近时间_裁剪);
+                视线 = 最接近位置.Position - 控制器.GetPosition();                
+            }
 
             // ----- 步骤7: 计算接近分量并执行重力补偿后处理 -----
             Vector3D 最终加速度命令;

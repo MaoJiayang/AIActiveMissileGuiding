@@ -12,7 +12,7 @@ namespace IngameScript
     /// </summary>
     public class 参数管理器
     {
-        public string 版本号 { get; } = "2.0.0-猪突猛进";
+        public string 版本号 { get; } = "2.0.1-猪突猛进";
         #region 制导相关参数
         /// <summary>
         /// 向量最小有效长度
@@ -164,12 +164,13 @@ namespace IngameScript
         /// <summary>
         /// 外环PID参数
         /// </summary>
-        public PID参数 外环参数 { get; set; } = new PID参数(5, 0, 0);
-
+        // public PID参数 外环参数 { get; set; } = new PID参数(5, 0, 0);// 激进
+        public PID参数 外环参数 { get; set; } = new PID参数(3, 0, 0);// 保守
         /// <summary>
         /// 内环PID参数
         /// </summary>
-        public PID参数 内环参数 { get; set; } = new PID参数(21, 0.01, 0.9);
+        // public PID参数 内环参数 { get; set; } = new PID参数(21, 0.01, 0.9);// 激进
+        public PID参数 内环参数 { get; set; } = new PID参数(35, 0.01, 0.1);// 保守
 
         #endregion
 

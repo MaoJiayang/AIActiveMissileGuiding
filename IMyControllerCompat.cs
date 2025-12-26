@@ -68,6 +68,11 @@ namespace IngameScript
         string CustomName { get; }
 
         /// <summary>
+        /// 控制器或方块的自定义数据。
+        /// </summary>
+        string CustomData { get; set; }
+
+        /// <summary>
         /// 控制器或方块的世界矩阵（位置和朝向）。
         /// </summary>
         MatrixD WorldMatrix { get; }
@@ -103,6 +108,7 @@ namespace IngameScript
         private MyShipMass _缓存质量 = new MyShipMass(-1, -1, -1);
         private Vector3I 方块空间占用 = Vector3I.Zero;
         public string CustomName { get { return block.CustomName; } }
+        public string CustomData { get { return block.CustomData; } set { block.CustomData = value; } }
         public MatrixD WorldMatrix { get { return block.WorldMatrix; } }
 
         public BlockMotionTracker(IMyTerminalBlock block, double updateIntervalSeconds = 0.0166666667, Action<string> Echo = null)
@@ -222,6 +228,7 @@ namespace IngameScript
         public MyShipMass CalculateShipMass() { return ctrl.CalculateShipMass(); }
         public Vector3D GetPosition() { return ctrl.GetPosition(); }
         public string CustomName { get { return ctrl.CustomName; } }
+        public string CustomData { get { return ctrl.CustomData; } set { ctrl.CustomData = value; } }
         public MatrixD WorldMatrix { get { return ctrl.WorldMatrix; } }
         public bool IsFunctional { get { return ctrl.IsFunctional; } }
         public bool Closed { get { return ctrl.Closed; } }

@@ -1319,6 +1319,9 @@ namespace IngameScript
 
                 if (argument == "test")
                 {
+                    // 清空角度误差记录数据
+                    清空角度误差记录();
+                    
                     // 生成随机向量作为测试目标
                     Random random = new Random();
                     double x = random.NextDouble() * 2 - 1;  // -1到1之间
@@ -1335,6 +1338,9 @@ namespace IngameScript
                 }
                 else if (argument == "testbackward")
                 {
+                    // 清空角度误差记录数据
+                    清空角度误差记录();
+                    
                     // 测试前向控制
                     if (控制器 != null)
                     {
@@ -1345,6 +1351,9 @@ namespace IngameScript
                 }
                 else if (argument == "testup")
                 {
+                    // 清空角度误差记录数据
+                    清空角度误差记录();
+                    
                     // 测试上向控制
                     if (控制器 != null)
                     {
@@ -1354,6 +1363,9 @@ namespace IngameScript
                 }
                 else if (argument == "testright")
                 {
+                    // 清空角度误差记录数据
+                    清空角度误差记录();
+                    
                     // 测试右向控制
                     if (控制器 != null)
                     {
@@ -1363,6 +1375,9 @@ namespace IngameScript
                 }
                 else if (argument == "testforward")
                 {
+                    // 清空角度误差记录数据
+                    清空角度误差记录();
+                    
                     // 测试前向控制
                     if (控制器 != null)
                     {
@@ -1372,12 +1387,18 @@ namespace IngameScript
                 }
                 else if (argument == "testouter")
                 {
+                    // 清空角度误差记录数据
+                    清空角度误差记录();
+                    
                     // 测试外源扰动方向
                     测试目标位置 = 控制器.GetPosition() + 控制器.GetAcceleration() * 114514.0;
                     需要更新目标 = true;
                 }
                 else if (argument == "stop")
                 {
+                    // 清空角度误差记录数据
+                    清空角度误差记录();
+                    
                     // 停止陀螺仪覆盖
                     陀螺仪.关机();
                     // 停止推进器
@@ -1415,6 +1436,9 @@ namespace IngameScript
                     Echo($"自身质量: {控制器.CalculateShipMass().PhysicalMass:n1} kg");
                     // Echo($"PID外环参数: P={参数们.外环参数.P系数}, I={参数们.外环参数.I系数}, D={参数们.外环参数.D系数}");
                     // Echo($"PID内环参数: P={参数们.内环参数.P系数}, I={参数们.内环参数.I系数}, D={参数们.内环参数.D系数}");
+                    
+                    // 记录角度误差
+                    记录角度误差(到目标向量);
                 }
                 else
                 {
@@ -1425,6 +1449,85 @@ namespace IngameScript
             {
                 Echo("没有可用的目标历史记录进行测试");
             }
+        }
+
+        /// <summary>
+        /// 清空角度误差记录数据
+        /// </summary>
+        private void 清空角度误差记录()
+        {
+            if (控制器 != null)
+            {
+                控制器.CustomData = "";
+            }
+        }
+
+        /// <summary>
+        /// 记录角度误差到控制器的自定义数据中
+        /// </summary>
+        /// <param name="到目标向量">从导弹到目标的向量</param>
+        private void 记录角度误差(Vector3D 到目标向量)
+        {
+            if (控制器 == null) return;
+
+            // 计算角度误差（导弹实际角度和目标角度的差值）
+            Vector3D 期望方向 = Vector3D.Normalize(到目标向量);
+            Vector3D 当前前向 = 控制器.WorldMatrix.Forward;
+
+            // 计算夹角（带符号的角度误差）
+            double 点积 = Vector3D.Dot(当前前向, 期望方向);
+            点积 = Math.Max(-1, Math.Min(1, 点积)); // 限制范围防止数值误差
+            double 角度误差_弧度 = Math.Acos(点积);
+
+            // 计算旋转轴以确定正负号
+            Vector3D 旋转轴 = Vector3D.Cross(当前前向, 期望方向);
+            // 使用导弹的Up向量作为参考判断方向
+            double 方向符号 = Vector3D.Dot(旋转轴, 控制器.WorldMatrix.Up);
+            if (方向符号 < 0)
+            {
+                角度误差_弧度 = -角度误差_弧度;
+            }
+
+            // 转换为角度
+            double 角度误差_度 = 角度误差_弧度 * 180.0 / Math.PI;
+
+            // 获取当前自定义数据（去掉首末方括号）
+            string 当前数据 = 控制器.CustomData;
+            if (当前数据.StartsWith("[") && 当前数据.EndsWith("]"))
+            {
+                当前数据 = 当前数据.Substring(1, 当前数据.Length - 2);
+            }
+
+            // 添加新的误差值（在非空数据后先加逗号）
+            string 新数据 = 当前数据 + (当前数据.Length > 0 ? "," : "") + 角度误差_度.ToString("F4");
+
+            // 检查数据长度，超过32768则采用队列形式（抛弃早期数据）
+            const int 最大数据长度 = 32768;
+            if (新数据.Length > 最大数据长度)
+            {
+                // 找到第一个逗号的位置，删除第一个数据点
+                int 第一个逗号位置 = 新数据.IndexOf(',');
+                if (第一个逗号位置 >= 0)
+                {
+                    新数据 = 新数据.Substring(第一个逗号位置 + 1);
+                }
+                // 如果还是超长，继续删除直到长度合适
+                while (新数据.Length > 最大数据长度)
+                {
+                    第一个逗号位置 = 新数据.IndexOf(',');
+                    if (第一个逗号位置 >= 0)
+                    {
+                        新数据 = 新数据.Substring(第一个逗号位置 + 1);
+                    }
+                    else
+                    {
+                        break; // 没有逗号了，退出
+                    }
+                }
+            }
+
+            // 更新控制器的自定义数据（在首末加方括号）
+            控制器.CustomData = $"[{新数据}]";
         }
 
         #endregion

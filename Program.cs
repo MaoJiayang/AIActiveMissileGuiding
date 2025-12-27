@@ -291,7 +291,12 @@ namespace IngameScript
                 else if (argument.ToLower() == "save")
                 {
                     方块组.重新框定();
-                    已经初始化 = false;
+                    重置初始化();
+                    return;
+                }
+                else if (argument.ToLower() == "init")
+                {
+                    重置初始化();
                     return;
                 }
             }

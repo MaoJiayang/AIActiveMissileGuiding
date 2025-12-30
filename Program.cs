@@ -48,18 +48,18 @@ namespace IngameScript
         // 纯方向制导 - 视线角速度PID控制器
         private PID 视线角速度PID控制器;
 
-        MovingAverageQueue<Vector3D> 外源扰动缓存 = new MovingAverageQueue<Vector3D>(
-            20,
-            (a, b) => a + b,
-            (a, b) => a - b,
-            (a, n) => a / n   // VRageMath.Vector3D 已重载 / double
-        );
-        MovingAverageQueue<Vector3D> 敌加速度缓存 = new MovingAverageQueue<Vector3D>(
-            5,
-            (a, b) => a + b,
-            (a, b) => a - b,
-            (a, n) => a / n   // VRageMath.Vector3D 已重载 / double
-        );
+        // MovingAverageQueue<Vector3D> 外源扰动缓存 = new MovingAverageQueue<Vector3D>(
+        //     20,
+        //     (a, b) => a + b,
+        //     (a, b) => a - b,
+        //     (a, n) => a / n   // VRageMath.Vector3D 已重载 / double
+        // );
+        // MovingAverageQueue<Vector3D> 敌加速度缓存 = new MovingAverageQueue<Vector3D>(
+        //     5,
+        //     (a, b) => a + b,
+        //     (a, b) => a - b,
+        //     (a, n) => a / n   // VRageMath.Vector3D 已重载 / double
+        // );
 
         #endregion
 
@@ -76,6 +76,7 @@ namespace IngameScript
         private 推进系统 推进器系统;
         private 陀螺仪瞄准系统 陀螺仪;
         private List<IMyGravityGeneratorBase> 重力发生器列表 = new List<IMyGravityGeneratorBase>();
+        private List<IMyArtificialMassBlock> 人造重力块列表 = new List<IMyArtificialMassBlock>();
         // 引爆系统组件（可选）
         private List<IMySensorBlock> 传感器列表 = new List<IMySensorBlock>();
         private List<IMyWarhead> 激发雷管组 = new List<IMyWarhead>();
@@ -427,6 +428,12 @@ namespace IngameScript
                 {
                     重力发生器.Enabled = false;
                 }
+                
+                // 关闭人造重力块
+                foreach (var 重力块 in 人造重力块列表)
+                {
+                    重力块.Enabled = false;
+                }
 
                 // 设置气罐为充气模式
                 if (氢气罐系统可用)
@@ -522,10 +529,16 @@ namespace IngameScript
             //     陀螺仪.GyroOverride = true;
             // }
 
-            // 关闭重力发生器
+            // 开启重力发生器
             foreach (var 重力发生器 in 重力发生器列表)
             {
                 重力发生器.Enabled = true;
+            }
+
+            // 开启人造重力块
+            foreach (var 重力块 in 人造重力块列表)
+            {
+                重力块.Enabled = true;
             }
 
             foreach (var 氢气罐 in 氢气罐列表)
@@ -672,6 +685,11 @@ namespace IngameScript
                 case 10: // Stage 5: 获取重力发生器
                     重力发生器列表.Clear();
                     方块组.GetBlocksOfType(重力发生器列表);
+                    return false;
+
+                case 11: // Stage 5: 获取人造重力块
+                    人造重力块列表.Clear();
+                    方块组.GetBlocksOfType(人造重力块列表);
                     return false;
 
                 case 12: // Stage 6: 初始化引爆系统

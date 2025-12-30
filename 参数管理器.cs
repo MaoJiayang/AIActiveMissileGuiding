@@ -12,7 +12,7 @@ namespace IngameScript
     /// </summary>
     public class 参数管理器
     {
-        public string 版本号 { get; } = "2.0.1-猪突猛进";
+        public string 版本号 { get; } = "2.0.2-猪突猛进";
         #region 制导相关参数
         /// <summary>
         /// 向量最小有效长度

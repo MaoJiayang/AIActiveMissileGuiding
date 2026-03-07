@@ -43,7 +43,7 @@ namespace IngameScript
         private IMyProgrammableBlock Me;
         private bool 推进器已分类 = false;
         private long 内部时钟 = 0;
-        public IMyControllerCompat 参考驾驶舱 { get; private set; }
+        public IMyControllerCompact 参考驾驶舱 { get; private set; }
         public bool 已初始化
         {
             get { return 推进器列表.Count > 0 && 参考驾驶舱 != null; }
@@ -58,7 +58,7 @@ namespace IngameScript
             参数们 = 参数管理器;
             this.Me = Me;
         }
-        public void 初始化(IMyBlockGroup 方块组, IMyControllerCompat 控制器)
+        public void 初始化(IMyBlockGroup 方块组, IMyControllerCompact 控制器)
         {
             // 获取参考驾驶舱
             参考驾驶舱 = 控制器;
@@ -68,7 +68,7 @@ namespace IngameScript
             初始化分离推进器();
             分类推进器(控制器);
         }
-        public void 初始化(导弹识别器 方块组, IMyControllerCompat 控制器)
+        public void 初始化(导弹识别器 方块组, IMyControllerCompact 控制器)
         {
             // 获取参考驾驶舱
             参考驾驶舱 = 控制器;
@@ -78,7 +78,7 @@ namespace IngameScript
             初始化分离推进器();
             分类推进器(控制器);
         }
-        public void 初始化(List<IMyThrust> 推进器列表, IMyControllerCompat 控制器)
+        public void 初始化(List<IMyThrust> 推进器列表, IMyControllerCompact 控制器)
         {
             // 获取参考驾驶舱
             参考驾驶舱 = 控制器;
@@ -190,7 +190,7 @@ namespace IngameScript
         /// </summary>
         /// <param name="期望方向">期望飞行方向（单位向量，世界坐标系）</param>
         /// <param name="控制器">控制器接口</param>
-        public void 控制推进器_开关模式(Vector3D 期望方向, IMyControllerCompat 控制器)
+        public void 控制推进器_开关模式(Vector3D 期望方向, IMyControllerCompact 控制器)
         {
             内部时钟++;
             if (内部时钟 % 参数们.动力系统更新间隔 != 0)
@@ -208,14 +208,14 @@ namespace IngameScript
             期望方向本地 = Vector3D.Normalize(期望方向本地);
 
             // 根据期望方向在各轴的分量决定推进器开关
-            
+            const double AXIS_THRES = 0.25;
             // X轴控制
-            if (期望方向本地.X > 0.1) // 期望向右
+            if (期望方向本地.X > AXIS_THRES) // 期望向右
             {
                 控制轴向推进器_开关("XP", true);  // 开启向右推力
                 控制轴向推进器_开关("XN", false); // 关闭向左推力
             }
-            else if (期望方向本地.X < -0.1) // 期望向左
+            else if (期望方向本地.X < -AXIS_THRES) // 期望向左
             {
                 控制轴向推进器_开关("XN", true);  // 开启向左推力
                 控制轴向推进器_开关("XP", false); // 关闭向右推力
@@ -227,12 +227,12 @@ namespace IngameScript
             }
 
             // Y轴控制
-            if (期望方向本地.Y > 0.1) // 期望向上
+            if (期望方向本地.Y > AXIS_THRES) // 期望向上
             {
                 控制轴向推进器_开关("YP", true);  // 开启向上推力
                 控制轴向推进器_开关("YN", false); // 关闭向下推力
             }
-            else if (期望方向本地.Y < -0.1) // 期望向下
+            else if (期望方向本地.Y < -AXIS_THRES) // 期望向下
             {
                 控制轴向推进器_开关("YN", true);  // 开启向下推力
                 控制轴向推进器_开关("YP", false); // 关闭向上推力
@@ -244,12 +244,12 @@ namespace IngameScript
             }
 
             // Z轴控制（主推进器）
-            if (期望方向本地.Z > 0.1) // 期望向后
+            if (期望方向本地.Z > AXIS_THRES) // 期望向后
             {
                 控制轴向推进器_开关("ZP", true);  // 开启向后推力
                 控制轴向推进器_开关("ZN", false); // 关闭向前推力
             }
-            else if (期望方向本地.Z < -0.1) // 期望向前
+            else if (期望方向本地.Z < -AXIS_THRES) // 期望向前
             {
                 控制轴向推进器_开关("ZN", true);  // 开启向前推力
                 控制轴向推进器_开关("ZP", false); // 关闭向后推力
@@ -291,7 +291,7 @@ namespace IngameScript
         /// <summary>
         /// 将推进器按方向分类并保存各轴向最大推力
         /// </summary>
-        private void 分类推进器(IMyControllerCompat 控制器)
+        private void 分类推进器(IMyControllerCompact 控制器)
         {
             // 清空所有组中的推进器和推力记录
             foreach (var key in 推进器推力方向组.Keys.ToList())

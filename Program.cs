@@ -72,7 +72,7 @@ namespace IngameScript
         private IMyOffensiveCombatBlock 战斗块;
 
         // 控制组件
-        private IMyControllerCompat 控制器;
+        private IMyControllerCompact 控制器;
         private 推进系统 推进器系统;
         private 陀螺仪瞄准系统 陀螺仪;
         private List<IMyGravityGeneratorBase> 重力发生器列表 = new List<IMyGravityGeneratorBase>();
@@ -586,8 +586,8 @@ namespace IngameScript
             {
                 long 当前时间戳 = (long)Math.Round(更新计数器 * 参数们.时间常数 * 1000);
                 // 添加到目标跟踪器
-                目标跟踪器.UpdateTarget(目标位置, Vector3D.Zero, 当前时间戳);
-                // 获取最新目标信息进行制导
+                目标跟踪器.UpdateTarget(目标位置, 当前时间戳);
+                // 获取最新目标信息进行制导。这不只是获取，也有计算速度和加速度的功能，以便纯方向制导使用。
                 SimpleTargetInfo 目标信息 = 目标跟踪器.PredictFutureTargetInfo(0);
 
                 // ========== 使用纯方向制导 ==========
@@ -970,7 +970,7 @@ namespace IngameScript
         /// <summary>
         /// 应用制导命令，控制陀螺仪和推进器（原有加速度控制方式）
         /// </summary>
-        private void 应用制导命令(Vector3D 加速度命令, IMyControllerCompat 控制器)
+        private void 应用制导命令(Vector3D 加速度命令, IMyControllerCompact 控制器)
         {
             // 控制陀螺仪
             陀螺仪.方向瞄准(加速度命令);
@@ -983,7 +983,7 @@ namespace IngameScript
         /// </summary>
         /// <param name="期望方向">期望飞行方向（单位向量）</param>
         /// <param name="控制器">控制器接口</param>
-        private void 应用方向制导命令(Vector3D 期望方向, IMyControllerCompat 控制器)
+        private void 应用方向制导命令(Vector3D 期望方向, IMyControllerCompact 控制器)
         {
             // 控制陀螺仪对准期望方向
             陀螺仪.方向瞄准(期望方向);
@@ -997,7 +997,7 @@ namespace IngameScript
         /// <param name="控制器">飞船控制器</param>
         /// <param name="目标信息">目标信息</param>
         /// <returns>期望飞行方向（单位向量）</returns>
-        private Vector3D 纯方向制导(IMyControllerCompat 控制器, SimpleTargetInfo 目标信息)
+        private Vector3D 纯方向制导(IMyControllerCompact 控制器, SimpleTargetInfo 目标信息)
         {
             // 更新诊断信息
             比例导航诊断信息.Clear();

@@ -12,7 +12,7 @@ namespace IngameScript
     /// <summary>
     /// 控制器兼容接口，统一抽象真实控制器和BlockMotionTracker的常用功能。
     /// </summary>
-    public interface IMyControllerCompat
+    public interface IMyControllerCompact
     {
         /// <summary>
         /// 获取自然重力加速度（如行星引力）。
@@ -94,7 +94,7 @@ namespace IngameScript
     }
 
     // 2. BlockMotionTracker 实现接口
-    public class BlockMotionTracker : IMyControllerCompat
+    public class BlockMotionTracker : IMyControllerCompact
     {
         private IMyTerminalBlock block;
         private MyCubeSize _gridSize;
@@ -213,7 +213,7 @@ namespace IngameScript
     }
 
     // 3. 控制器适配器
-    public class ShipControllerAdapter : IMyControllerCompat
+    public class ShipControllerAdapter : IMyControllerCompact
     {
         private IMyShipController ctrl;
         private Vector3D LastLinearVelocity = Vector3D.Zero;

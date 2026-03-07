@@ -28,7 +28,7 @@ namespace IngameScript
     {
         private 参数管理器 参数们;
         private List<IMyGyro> 陀螺仪列表 = new List<IMyGyro>();
-        public IMyControllerCompat 参考驾驶舱 { get; private set; }
+        public IMyControllerCompact 参考驾驶舱 { get; private set; }
         private IMyProgrammableBlock Me;
         private Dictionary<IMyGyro, Vector3D> 陀螺仪各轴点积 = new Dictionary<IMyGyro, Vector3D>();
         public bool 已初始化
@@ -61,7 +61,7 @@ namespace IngameScript
             参数们 = 参数管理器;
             this.Me = Me;
         }
-        public void 初始化(IMyBlockGroup 方块组, IMyControllerCompat 参考驾驶舱)
+        public void 初始化(IMyBlockGroup 方块组, IMyControllerCompact 参考驾驶舱)
         {
             方块组.GetBlocksOfType(陀螺仪列表);
             this.参考驾驶舱 = 参考驾驶舱;
@@ -69,7 +69,7 @@ namespace IngameScript
             内部时钟 = -1; // 初始化时钟为-1，第一次调用Update时会自动更新
             关机();          
         }
-        public void 初始化(导弹识别器 方块组, IMyControllerCompat 参考驾驶舱)
+        public void 初始化(导弹识别器 方块组, IMyControllerCompact 参考驾驶舱)
         {
             方块组.GetBlocksOfType(陀螺仪列表);
             this.参考驾驶舱 = 参考驾驶舱;
@@ -77,7 +77,7 @@ namespace IngameScript
             内部时钟 = -1; // 初始化时钟为-1，第一次调用Update时会自动更新
             关机();          
         }        
-        public void 初始化(List<IMyGyro> 陀螺仪列表, IMyControllerCompat 参考驾驶舱)
+        public void 初始化(List<IMyGyro> 陀螺仪列表, IMyControllerCompact 参考驾驶舱)
         {
             this.陀螺仪列表 = 陀螺仪列表;
             this.参考驾驶舱 = 参考驾驶舱;
@@ -162,7 +162,7 @@ namespace IngameScript
         /// <summary>
         /// 计算陀螺仪的目标转向角度，使其指向加速度命令
         /// </summary>
-        private Vector3D 计算陀螺仪目标角度(Vector3D 方向, IMyControllerCompat 控制器)
+        private Vector3D 计算陀螺仪目标角度(Vector3D 方向, IMyControllerCompact 控制器)
         {
             // 计算加速度方向作为期望的转向（世界坐标系）
             Vector3D 期望方向 = Vector3D.Normalize(方向);
@@ -193,7 +193,7 @@ namespace IngameScript
         /// <summary>
         /// 控制陀螺仪实现所需转向
         /// </summary>
-        private void 应用陀螺仪控制(Vector3D 目标角度PYR, IMyControllerCompat 控制器)
+        private void 应用陀螺仪控制(Vector3D 目标角度PYR, IMyControllerCompact 控制器)
         {
             // 检查角度误差是否在阈值范围内
             double 角度误差大小 = 目标角度PYR.Length();
@@ -266,7 +266,7 @@ namespace IngameScript
         /// <param name="陀螺仪本地命令">陀螺仪的本地命令向量</param>
         /// <param name="弧度每秒">滚转速度（弧度/秒）包含方向</param>
         /// <returns>应施加的本地命令向量 包含滚转轴的命令</returns>
-        private Vector3D 加入本地滚转(IMyGyro 陀螺仪, Vector3D 陀螺仪本地命令, IMyControllerCompat 控制器, double 弧度每秒 = 0.0)
+        private Vector3D 加入本地滚转(IMyGyro 陀螺仪, Vector3D 陀螺仪本地命令, IMyControllerCompact 控制器, double 弧度每秒 = 0.0)
         {
             Vector3D 该陀螺仪点积 = 陀螺仪对轴(陀螺仪, 控制器);
             // if (弧度每秒 < 1e-6)
@@ -301,7 +301,7 @@ namespace IngameScript
         /// 如果有缓存则直接取出
         /// 目的：找出滚转轴
         /// </summary>
-        private Vector3D 陀螺仪对轴(IMyGyro 陀螺仪, IMyControllerCompat 控制器)
+        private Vector3D 陀螺仪对轴(IMyGyro 陀螺仪, IMyControllerCompact 控制器)
         {
             // 获取导弹Z轴方向（控制器的前进方向）
             Vector3D 导弹Z轴方向 = 控制器.WorldMatrix.Forward;

@@ -30,11 +30,6 @@ namespace IngameScript
         public double 角度误差最小值 { get; set; } = Math.PI / 180.0 * 0.2;
 
         /// <summary>
-        /// 是否启用攻击角度约束
-        /// </summary>
-        public bool 启用攻击角度约束 { get; set; } = true;
-
-        /// <summary>
         /// 允许参与制导量计算的最大外力干扰量(m/s^2)
         /// 11.8约等于1.2g
         /// </summary>
@@ -48,7 +43,7 @@ namespace IngameScript
         /// 视线角速度PID - P系数
         /// 2D原型验证值：10.0
         /// </summary>
-        public double 方向制导_Kp { get; set; } = 12.0;
+        public double 方向制导_Kp { get; set; } = 16.0;
 
         /// <summary>
         /// 视线角速度PID - I系数
@@ -60,7 +55,7 @@ namespace IngameScript
         /// 视线角速度PID - D系数
         /// 2D原型验证值：12.5
         /// </summary>
-        public double 方向制导_Kd { get; set; } = 3;
+        public double 方向制导_Kd { get; set; } = 8;
 
         /// <summary>
         /// 积分限幅（防止积分饱和）
@@ -186,7 +181,7 @@ namespace IngameScript
         /// <summary>
         /// 目标历史记录最大长度
         /// </summary>
-        public int 目标历史最大长度 { get; set; } = 16;
+        public int 目标历史最大长度 { get; set; } = 12;
 
         #endregion
 
@@ -367,11 +362,6 @@ namespace IngameScript
                 () => 格式化角度(角度误差最小值),
                 v => 角度误差最小值 = 解析角度(v),
                 "角度误差下限，小于此值视为对准(度)");
-
-            注册参数("启用攻击角度约束",
-                () => 启用攻击角度约束.ToString(),
-                v => { bool val; if (bool.TryParse(v, out val)) 启用攻击角度约束 = val; },
-                "是否启用攻击角度约束");
 
             // 注册 MeGridMax 参数
             注册参数("MeGridMax",

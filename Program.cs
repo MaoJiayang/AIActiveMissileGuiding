@@ -18,6 +18,7 @@ using VRage.Game.GUI.TextPanel;
 using VRage.Game.ModAPI.Ingame;
 using VRage.Game.ModAPI.Ingame.Utilities;
 using VRage.Game.ObjectBuilders.Definitions;
+using VRage.GameServices;
 using VRageMath;
 // TODO：动态比例导引常数的距离逻辑中，将最大距离从2500改到发射点距离目标的距离。
 // TODO: 方块质量估算修修复：需要找到一个包括装甲块的办法
@@ -33,7 +34,7 @@ namespace IngameScript
         private 参数管理器 参数们;
 
         private 导弹识别器 方块组;
-
+        
         #endregion
 
         #region 状态变量
@@ -1034,6 +1035,12 @@ namespace IngameScript
             {
                 // 旋转轴 = 视线角速度的方向（垂直于视线和相对速度构成的平面）
                 Vector3D 旋转轴 = 视线角速度向量 / 视线角速度大小;
+
+                // // 替换 Step3~Step5 部分
+                // double 横向相对速率 = 视线角速度大小 * 距离;          // 横向相对速度 |v_rel⊥|
+                // double 接近速率 = -Vector3D.Dot(相对速度, 视线单位向量); // 接近速率（正=接近）
+                // double 有效分母 = Math.Max(接近速率, Math.Max(横向相对速率 , 参数们.最小向量长度));
+                // double 修正角度 = Math.Atan(参数们.方向制导_Kp * 横向相对速率 / 有效分母);
 
                 // Step4: 标量PID控制 - 目标是使视线角速度大小归零
                 // 输入：当前视线角速度大小（误差，期望值为0）

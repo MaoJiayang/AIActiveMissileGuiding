@@ -209,6 +209,7 @@ namespace IngameScript
 
             // 根据期望方向在各轴的分量决定推进器开关
             const double AXIS_THRES = 0.25;
+            // const double AXIS_THRES = 1e-6;
             // X轴控制
             if (期望方向本地.X > AXIS_THRES) // 期望向右
             {
